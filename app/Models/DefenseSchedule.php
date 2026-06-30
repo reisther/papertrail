@@ -1,0 +1,205 @@
+<?php
+
+namespace App\Models;
+
+use Illuminate\Database\Eloquent\Model;
+use Illuminate\Database\Eloquent\Relations\BelongsTo;
+
+class DefenseSchedule extends Model
+{
+    protected $fillable = [
+        'title',
+        'description',
+        'student_id',
+        'adviser_id',
+        'project_id',
+        'start_time',
+        'end_time',
+        'location',
+        'status',
+        'panel_members',
+        'notes',
+        'meeting_link',
+        'google_event_id',
+        'google_calendar_link',
+        'auto_create_meet',
+        'meeting_platform',
+        'type',
+        'created_by',
+    ];
+
+    protected $casts = [
+        'start_time' => 'datetime',
+        'end_time' => 'datetime',
+        'panel_members' => 'array',
+        'auto_create_meet' => 'boolean',
+    ];
+
+    /**
+     * Get the student for this defense
+     */
+    public function student(): BelongsTo
+    {
+        return $this->belongsTo(User::class, 'student_id');
+    }
+
+    /**
+     * Get the adviser for this defense
+     */
+    public function adviser(): BelongsTo
+    {
+        return $this->belongsTo(User::class, 'adviser_id');
+    }
+
+    /**
+     * Get the project for this defense
+     */
+    public function project(): BelongsTo
+    {
+        return $this->belongsTo(Project::class);
+    }
+
+    /**
+     * Get the user who created this schedule
+     */
+    public function creator(): BelongsTo
+    {
+        return $this->belongsTo(User::class, 'created_by');
+    }
+
+    /**
+     * Get panel members
+     */
+    public function getPanelMembersUsersAttribute()
+    {
+        if (!$this->panel_members) {
+            return collect();
+        }
+        
+        return User::whereIn('id', $this->panel_members)->get();
+    }
+
+    /**
+     * Check if user can view this defense schedule
+     */
+    public function canView(User $user): bool
+    {
+        return $user->role === 'Admin' ||
+               $this->student_id === $user->id ||
+               $this->adviser_id === $user->id ||
+               $this->created_by === $user->id ||
+               ($this->project && $this->project->members()->where('users.id', $user->id)->exists()) ||
+               ($this->panel_members && in_array($user->id, $this->panel_members));
+    }
+
+    /**
+     * Check if user can edit this defense schedule
+     */
+    public function canEdit(User $user): bool
+    {
+        return $user->role === 'Admin' ||
+               $this->adviser_id === $user->id ||
+               $this->created_by === $user->id ||
+               ($this->project && $this->project->owner_id === $user->id && $user->canLeadGroup());
+    }
+
+    /**
+     * Get formatted duration
+     */
+    public function getDurationAttribute(): string
+    {
+        $minutes = $this->start_time->diffInMinutes($this->end_time);
+        $hours = floor($minutes / 60);
+        $remainingMinutes = $minutes % 60;
+        
+        if ($hours > 0) {
+            return $remainingMinutes > 0 ? "{$hours}h {$remainingMinutes}m" : "{$hours}h";
+        }
+        
+        return "{$remainingMinutes}m";
+    }
+
+    /**
+     * Get status color for display
+     */
+    public function getStatusColorAttribute(): string
+    {
+        return match($this->status) {
+            'scheduled' => 'blue',
+            'completed' => 'green',
+            'cancelled' => 'red',
+            'rescheduled' => 'yellow',
+            default => 'gray'
+        };
+    }
+
+    /**
+     * Get type color for display
+     */
+    public function getTypeColorAttribute(): string
+    {
+        return match($this->type) {
+            'proposal' => 'purple',
+            'final' => 'blue',
+            'oral_exam' => 'green',
+            default => 'gray'
+        };
+    }
+
+    /**
+     * Check if this schedule uses Google Meet
+     */
+    public function usesGoogleMeet(): bool
+    {
+        return $this->meeting_platform === 'google_meet';
+    }
+
+    /**
+     * Check if Google Meet link should be auto-created
+     */
+    public function shouldAutoCreateMeet(): bool
+    {
+        return $this->auto_create_meet && $this->meeting_platform === 'google_meet';
+    }
+
+    /**
+     * Get the effective meeting link (Google Meet or manual)
+     */
+    public function getEffectiveMeetingLinkAttribute(): ?string
+    {
+        if ($this->usesGoogleMeet() && $this->meeting_link) {
+            return $this->meeting_link;
+        }
+        
+        return $this->meeting_link;
+    }
+
+    /**
+     * Get attendee emails for Google Meet
+     */
+    public function getAttendeeEmails(): array
+    {
+        $emails = [];
+        
+        // Add student email
+        if ($this->student && $this->student->email) {
+            $emails[] = $this->student->email;
+        }
+        
+        // Add adviser email
+        if ($this->adviser && $this->adviser->email) {
+            $emails[] = $this->adviser->email;
+        }
+        
+        // Add panel member emails
+        if ($this->panel_members) {
+            $panelEmails = User::whereIn('id', $this->panel_members)
+                ->pluck('email')
+                ->filter()
+                ->toArray();
+            $emails = array_merge($emails, $panelEmails);
+        }
+        
+        return array_unique($emails);
+    }
+}

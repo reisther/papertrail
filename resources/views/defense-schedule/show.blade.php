@@ -1,0 +1,372 @@
+<x-app-layout>
+    <x-slot name="header">
+        <div class="flex justify-between items-center">
+            <h2 class="font-semibold text-xl text-gray-800 leading-tight">
+                Defense Schedule Details
+            </h2>
+            <div class="flex space-x-3">
+                @if($defenseSchedule->canEdit(Auth::user()))
+                    <a href="{{ route('defense-schedule.edit', $defenseSchedule) }}" 
+                       class="bg-green-600 hover:bg-green-700 text-white px-4 py-2 rounded-md text-sm font-medium transition-colors inline-flex items-center">
+                        <svg class="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z"></path>
+                        </svg>
+                        Edit
+                    </a>
+                @endif
+                <a href="{{ route('defense-schedule.index') }}" 
+                   class="bg-gray-600 hover:bg-gray-700 text-white px-4 py-2 rounded-md text-sm font-medium transition-colors">
+                    ← Back to Calendar
+                </a>
+            </div>
+        </div>
+    </x-slot>
+
+    <div class="py-12">
+        <div class="max-w-4xl mx-auto sm:px-6 lg:px-8">
+            <div class="bg-white overflow-hidden shadow-sm sm:rounded-lg">
+                <div class="p-6">
+                    <!-- Defense Title and Status -->
+                    <div class="flex justify-between items-start mb-6">
+                        <div>
+                            <h1 class="text-2xl font-bold text-gray-900 mb-2">{{ $defenseSchedule->title }}</h1>
+                            <div class="flex items-center space-x-4">
+                                <span class="inline-flex px-3 py-1 text-sm font-semibold rounded-full
+                                    @if($defenseSchedule->status === 'scheduled') bg-blue-100 text-blue-800
+                                    @elseif($defenseSchedule->status === 'completed') bg-green-100 text-green-800
+                                    @elseif($defenseSchedule->status === 'cancelled') bg-red-100 text-red-800
+                                    @else bg-yellow-100 text-yellow-800 @endif">
+                                    {{ ucfirst($defenseSchedule->status) }}
+                                </span>
+                                <span class="inline-flex px-3 py-1 text-sm font-semibold rounded-full
+                                    @if($defenseSchedule->type === 'proposal') bg-purple-100 text-purple-800
+                                    @elseif($defenseSchedule->type === 'final') bg-blue-100 text-blue-800
+                                    @else bg-green-100 text-green-800 @endif">
+                                    {{ ucwords(str_replace('_', ' ', $defenseSchedule->type)) }}
+                                </span>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Main Information Grid -->
+                    <div class="grid grid-cols-1 lg:grid-cols-2 gap-8">
+                        <!-- Left Column -->
+                        <div class="space-y-6">
+                            <!-- Date and Time -->
+                            <div class="bg-gray-50 rounded-lg p-4">
+                                <h3 class="text-lg font-medium text-gray-900 mb-3 flex items-center">
+                                    <svg class="w-5 h-5 mr-2 text-gray-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"></path>
+                                    </svg>
+                                    Schedule
+                                </h3>
+                                <div class="space-y-2">
+                                    <div class="flex justify-between">
+                                        <span class="text-gray-600">Start:</span>
+                                        <span class="font-medium">{{ $defenseSchedule->start_time->format('M j, Y g:i A') }}</span>
+                                    </div>
+                                    <div class="flex justify-between">
+                                        <span class="text-gray-600">End:</span>
+                                        <span class="font-medium">{{ $defenseSchedule->end_time->format('M j, Y g:i A') }}</span>
+                                    </div>
+                                    <div class="flex justify-between">
+                                        <span class="text-gray-600">Duration:</span>
+                                        <span class="font-medium">{{ $defenseSchedule->duration }}</span>
+                                    </div>
+                                </div>
+                            </div>
+
+                            <!-- Participants -->
+                            <div class="bg-gray-50 rounded-lg p-4">
+                                <h3 class="text-lg font-medium text-gray-900 mb-3 flex items-center">
+                                    <svg class="w-5 h-5 mr-2 text-gray-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0zm6 3a2 2 0 11-4 0 2 2 0 014 0zM7 10a2 2 0 11-4 0 2 2 0 014 0z"></path>
+                                    </svg>
+                                    Participants
+                                </h3>
+                                <div class="space-y-3">
+                                    <div class="flex items-center space-x-3">
+                                        <div class="w-8 h-8 bg-blue-100 rounded-full flex items-center justify-center">
+                                            <span class="text-xs font-medium text-blue-600">S</span>
+                                        </div>
+                                        <div>
+                                            <div class="font-medium">{{ $defenseSchedule->student->name }}</div>
+                                            <div class="text-sm text-gray-600">Student</div>
+                                        </div>
+                                    </div>
+                                    <div class="flex items-center space-x-3">
+                                        <div class="w-8 h-8 bg-green-100 rounded-full flex items-center justify-center">
+                                            <span class="text-xs font-medium text-green-600">A</span>
+                                        </div>
+                                        <div>
+                                            <div class="font-medium">{{ $defenseSchedule->adviser->name }}</div>
+                                            <div class="text-sm text-gray-600">Adviser</div>
+                                        </div>
+                                    </div>
+                                    @if($defenseSchedule->panel_members_users->count() > 0)
+                                        <div class="border-t pt-3 mt-3">
+                                            <div class="text-sm font-medium text-gray-700 mb-2">Panel Members:</div>
+                                            @foreach($defenseSchedule->panel_members_users as $panelist)
+                                                <div class="flex items-center space-x-3 mb-2">
+                                                    <div class="w-8 h-8 bg-purple-100 rounded-full flex items-center justify-center">
+                                                        <span class="text-xs font-medium text-purple-600">P</span>
+                                                    </div>
+                                                    <div>
+                                                        <div class="font-medium">{{ $panelist->name }}</div>
+                                                        <div class="text-sm text-gray-600">Panel Member</div>
+                                                    </div>
+                                                </div>
+                                            @endforeach
+                                        </div>
+                                    @endif
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- Right Column -->
+                        <div class="space-y-6">
+                            <!-- Location and Meeting -->
+                            <div class="bg-gray-50 rounded-lg p-4">
+                                <h3 class="text-lg font-medium text-gray-900 mb-3 flex items-center">
+                                    <svg class="w-5 h-5 mr-2 text-gray-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z"></path>
+                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 11a3 3 0 11-6 0 3 3 0 016 0z"></path>
+                                    </svg>
+                                    Location & Meeting
+                                </h3>
+                                <div class="space-y-4">
+                                    @if($defenseSchedule->location)
+                                        <div>
+                                            <div class="text-sm text-gray-600">Location:</div>
+                                            <div class="font-medium">{{ $defenseSchedule->location }}</div>
+                                        </div>
+                                    @endif
+                                    
+                                    <!-- Meeting Platform Info -->
+                                    <div>
+                                        <div class="text-sm text-gray-600 mb-1">Meeting Platform:</div>
+                                        <div class="flex items-center space-x-2">
+                                            @if($defenseSchedule->meeting_platform === 'google_meet')
+                                                <svg class="w-5 h-5 text-blue-600" viewBox="0 0 24 24" fill="currentColor">
+                                                    <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm-2 15l-5-5 1.41-1.41L10 14.17l7.59-7.59L19 8l-9 9z"/>
+                                                </svg>
+                                                <span class="font-medium text-blue-600">Google Meet</span>
+                                            @elseif($defenseSchedule->meeting_platform === 'zoom')
+                                                <span class="font-medium text-blue-600">Zoom</span>
+                                            @elseif($defenseSchedule->meeting_platform === 'teams')
+                                                <span class="font-medium text-blue-600">Microsoft Teams</span>
+                                            @else
+                                                <span class="font-medium text-gray-600">Manual Link</span>
+                                            @endif
+                                        </div>
+                                    </div>
+
+                                    <!-- Meeting Actions -->
+                                    @if($defenseSchedule->effective_meeting_link)
+                                        <div>
+                                            <div class="text-sm text-gray-600 mb-2">Online Meeting:</div>
+                                            <div class="flex flex-col space-y-2">
+                                                <!-- Join Meeting Button -->
+                                                <a href="{{ $defenseSchedule->effective_meeting_link }}" target="_blank" rel="noopener noreferrer"
+                                                   class="inline-flex items-center justify-center bg-green-600 hover:bg-green-700 text-white px-4 py-2 rounded-md text-sm font-medium transition-colors">
+                                                    <svg class="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 10l4.553-2.276A1 1 0 0121 8.618v6.764a1 1 0 01-1.447.894L15 14M5 18h8a2 2 0 002-2V8a2 2 0 00-2-2H5a2 2 0 00-2 2v8a2 2 0 002 2z"></path>
+                                                    </svg>
+                                                    Join {{ $defenseSchedule->meeting_platform === 'google_meet' ? 'Google Meet' : 'Meeting' }}
+                                                </a>
+
+                                                <!-- Calendar Link (if available) -->
+                                                @if($defenseSchedule->google_calendar_link)
+                                                    <a href="{{ $defenseSchedule->google_calendar_link }}" target="_blank" 
+                                                       class="inline-flex items-center justify-center bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-md text-sm font-medium transition-colors">
+                                                        <svg class="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z"></path>
+                                                        </svg>
+                                                        View in Google Calendar
+                                                    </a>
+                                                @endif
+
+                                                <!-- Update Google Meet Button (for editors) -->
+                                                @if($defenseSchedule->canEdit(Auth::user()) && $defenseSchedule->google_event_id)
+                                                    <form method="POST" action="{{ route('defense-schedule.update-google-meet', $defenseSchedule) }}" class="inline">
+                                                        @csrf
+                                                        <button type="submit" 
+                                                                class="inline-flex items-center justify-center bg-yellow-600 hover:bg-yellow-700 text-white px-4 py-2 rounded-md text-sm font-medium transition-colors w-full">
+                                                            <svg class="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"></path>
+                                                            </svg>
+                                                            Update Google Meet
+                                                        </button>
+                                                    </form>
+                                                @endif
+                                            </div>
+                                        </div>
+                                    @else
+                                        <!-- Create Google Meet Button (for editors when no meeting link exists) -->
+                                        @if($defenseSchedule->canEdit(Auth::user()))
+                                            <div>
+                                                <div class="text-sm text-gray-600 mb-2">No meeting link set</div>
+                                                <form method="POST" action="{{ route('defense-schedule.create-google-meet', $defenseSchedule) }}" class="inline">
+                                                    @csrf
+                                                    <button type="submit" 
+                                                            class="inline-flex items-center justify-center bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-md text-sm font-medium transition-colors">
+                                                        <svg class="w-4 h-4 mr-2" viewBox="0 0 24 24" fill="currentColor">
+                                                            <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm-2 15l-5-5 1.41-1.41L10 14.17l7.59-7.59L19 8l-9 9z"/>
+                                                        </svg>
+                                                        Create Google Meet
+                                                    </button>
+                                                </form>
+                                            </div>
+                                        @else
+                                            <div class="text-gray-500 italic">No meeting link available</div>
+                                        @endif
+                                    @endif
+                                    
+                                    @if(!$defenseSchedule->location && !$defenseSchedule->meeting_link)
+                                        <div class="text-gray-500 italic">No location or meeting link specified</div>
+                                    @endif
+                                </div>
+                            </div>
+
+                            <!-- Project Information -->
+                            @if($defenseSchedule->project)
+                                <div class="bg-gray-50 rounded-lg p-4">
+                                    <h3 class="text-lg font-medium text-gray-900 mb-3 flex items-center">
+                                        <svg class="w-5 h-5 mr-2 text-gray-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"></path>
+                                        </svg>
+                                        Project
+                                    </h3>
+                                    <div>
+                                        <div class="font-medium text-lg">{{ $defenseSchedule->project->title }}</div>
+                                        @if($defenseSchedule->project->description)
+                                            <div class="text-gray-600 mt-2">{{ Str::limit($defenseSchedule->project->description, 150) }}</div>
+                                        @endif
+                                        <a href="{{ route('projects.show', $defenseSchedule->project) }}" 
+                                           class="inline-flex items-center text-blue-600 hover:text-blue-800 mt-2">
+                                            <svg class="w-4 h-4 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14"></path>
+                                            </svg>
+                                            View Project
+                                        </a>
+                                    </div>
+                                </div>
+                            @endif
+
+                            <!-- Additional Information -->
+                            <div class="bg-gray-50 rounded-lg p-4">
+                                <h3 class="text-lg font-medium text-gray-900 mb-3 flex items-center">
+                                    <svg class="w-5 h-5 mr-2 text-gray-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"></path>
+                                    </svg>
+                                    Additional Information
+                                </h3>
+                                <div class="space-y-2 text-sm">
+                                    <div class="flex justify-between">
+                                        <span class="text-gray-600">Created by:</span>
+                                        <span class="font-medium">{{ $defenseSchedule->creator->name }}</span>
+                                    </div>
+                                    <div class="flex justify-between">
+                                        <span class="text-gray-600">Created on:</span>
+                                        <span class="font-medium">{{ $defenseSchedule->created_at->format('M j, Y g:i A') }}</span>
+                                    </div>
+                                    @if($defenseSchedule->updated_at != $defenseSchedule->created_at)
+                                        <div class="flex justify-between">
+                                            <span class="text-gray-600">Last updated:</span>
+                                            <span class="font-medium">{{ $defenseSchedule->updated_at->format('M j, Y g:i A') }}</span>
+                                        </div>
+                                    @endif
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Description -->
+                    @if($defenseSchedule->description)
+                        <div class="mt-8">
+                            <h3 class="text-lg font-medium text-gray-900 mb-3">Description</h3>
+                            <div class="bg-gray-50 rounded-lg p-4">
+                                <p class="text-gray-700 whitespace-pre-wrap">{{ $defenseSchedule->description }}</p>
+                            </div>
+                        </div>
+                    @endif
+
+                    <!-- Notes (Only for creators/advisers) -->
+                    @if($defenseSchedule->notes && $defenseSchedule->canEdit(Auth::user()))
+                        <div class="mt-8">
+                            <h3 class="text-lg font-medium text-gray-900 mb-3">Internal Notes</h3>
+                            <div class="bg-yellow-50 border border-yellow-200 rounded-lg p-4">
+                                <p class="text-gray-700 whitespace-pre-wrap">{{ $defenseSchedule->notes }}</p>
+                            </div>
+                        </div>
+                    @endif
+
+                    <!-- Actions -->
+                    @if($defenseSchedule->canEdit(Auth::user()))
+                        <div class="mt-8 pt-6 border-t border-gray-200">
+                            <div class="flex justify-between items-center">
+                                <div class="flex space-x-3">
+                                    <a href="{{ route('defense-schedule.edit', $defenseSchedule) }}" 
+                                       class="bg-green-600 hover:bg-green-700 text-white px-4 py-2 rounded-md text-sm font-medium transition-colors">
+                                        Edit Schedule
+                                    </a>
+                                </div>
+                                <button onclick="confirmDelete()" 
+                                        class="bg-red-600 hover:bg-red-700 text-white px-4 py-2 rounded-md text-sm font-medium transition-colors">
+                                    Delete Schedule
+                                </button>
+                            </div>
+                        </div>
+                    @endif
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Delete Confirmation Modal -->
+    <div id="deleteModal" class="fixed inset-0 bg-gray-600 bg-opacity-50 overflow-y-auto h-full w-full hidden z-50">
+        <div class="relative top-20 mx-auto p-5 border w-96 shadow-lg rounded-md bg-white">
+            <div class="mt-3">
+                <div class="mx-auto flex items-center justify-center h-12 w-12 rounded-full bg-red-100 mb-4">
+                    <svg class="h-6 w-6 text-red-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-2.5L13.732 4c-.77-.833-1.964-.833-2.732 0L4.082 16.5c-.77.833.192 2.5 1.732 2.5z"></path>
+                    </svg>
+                </div>
+                <h3 class="text-lg font-medium text-gray-900 text-center mb-2">Delete Defense Schedule</h3>
+                <p class="text-sm text-gray-500 text-center mb-6">
+                    Are you sure you want to delete this defense schedule? This action cannot be undone.
+                </p>
+                
+                <div class="flex justify-center space-x-3">
+                    <button onclick="closeDeleteModal()" 
+                            class="px-4 py-2 bg-gray-300 text-gray-700 rounded-md hover:bg-gray-400 transition-colors">
+                        Cancel
+                    </button>
+                    <form method="POST" action="{{ route('defense-schedule.destroy', $defenseSchedule) }}" class="inline">
+                        @csrf
+                        @method('DELETE')
+                        <button type="submit" 
+                                class="px-4 py-2 bg-red-600 hover:bg-red-700 text-white rounded-md transition-colors">
+                            Delete Schedule
+                        </button>
+                    </form>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        function confirmDelete() {
+            document.getElementById('deleteModal').classList.remove('hidden');
+        }
+
+        function closeDeleteModal() {
+            document.getElementById('deleteModal').classList.add('hidden');
+        }
+
+        // Close modal when clicking outside
+        document.getElementById('deleteModal').addEventListener('click', function(e) {
+            if (e.target === this) closeDeleteModal();
+        });
+    </script>
+</x-app-layout>
