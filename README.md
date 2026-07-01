@@ -22,7 +22,7 @@ A web-based thesis management system designed to support students, advisers, and
 
 **PaperTrail** is a thesis and capstone management platform built to make academic research collaboration more structured, transparent, and efficient.
 
-The system helps students manage research tasks, communicate with advisers, help to find the suitable adviser to their thesis, monitor thesis progress, and maintain an organized record of academic interactions. It also supports advisers and administrators by providing visibility into student activity, consultation history, and project development.
+The system helps students manage research tasks, communicate with advisers, help to find the suitable adviser to their thesis, monitor thesis progress, and maintain an organized record of academic interactions. It also supports advisers and administrators by providing visibility into student activity, history, and project development.
 
 ---
 
