@@ -222,7 +222,7 @@ class ChatController extends BaseController
             $currentUserId = Auth::id();
             
             $messages = $chatRoom->messages()
-                                ->with(['user:id,firstname,lastname', 'reactions.user:id,firstname,lastname'])
+                                ->with(['user:id,firstname,lastname,profile_picture_path,updated_at', 'replyTo.user:id,firstname,lastname', 'reactions.user:id,firstname,lastname'])
                                 ->orderBy('created_at', 'asc')
                                 ->get()
                                 ->filter(function ($message) use ($currentUserId) {
@@ -235,6 +235,9 @@ class ChatController extends BaseController
                                     $user = $message->user;
                                     $userName = $user ? ($user->firstname . ' ' . $user->lastname) : 'Deleted User';
                                     $userId = $user ? $user->id : null;
+                                    $userInitials = $user
+                                        ? strtoupper(substr($user->firstname ?? '', 0, 1) . substr($user->lastname ?? '', 0, 1))
+                                        : '?';
                                     
                                     // Check if current user has seen this message
                                     $seenBy = $message->seen_by ?? [];
@@ -249,9 +252,21 @@ class ChatController extends BaseController
                                         'id' => $message->id,
                                         'message' => $message->message,
                                         'message_type' => $message->message_type,
+                                        'is_pinned' => $message->is_pinned,
+                                        'reply_to' => $message->replyTo ? [
+                                            'id' => $message->replyTo->id,
+                                            'message' => $message->replyTo->message,
+                                            'user_name' => $message->replyTo->user
+                                                ? $message->replyTo->user->firstname . ' ' . $message->replyTo->user->lastname
+                                                : 'Deleted User',
+                                        ] : null,
                                         'user' => [
                                             'id' => $userId,
                                             'name' => $userName,
+                                            'initials' => $userInitials,
+                                            'avatar_url' => $user && $user->profile_picture_path
+                                                ? route('profile.picture', $user) . '?v=' . optional($user->updated_at)->timestamp
+                                                : null,
                                         ],
                                         'file_url' => $message->getFileUrl(),
                                         'file_name' => $message->file_name,
@@ -287,6 +302,26 @@ class ChatController extends BaseController
         }
     }
 
+    public function showFile(ChatMessage $message)
+    {
+        $user = Auth::user();
+        $chatRoom = $message->chatRoom;
+
+        if (!$user || !$chatRoom || (!$chatRoom->hasParticipant($user) && !$this->canAccessChatRoom($chatRoom, $user))) {
+            abort(403);
+        }
+
+        if (!$message->file_path || !Storage::disk('public')->exists($message->file_path)) {
+            abort(404);
+        }
+
+        return Storage::disk('public')->response(
+            $message->file_path,
+            $message->file_name,
+            ['Content-Type' => $message->file_type ?: 'application/octet-stream']
+        );
+    }
+
     /**
      * Send a message to a chat room
      */
@@ -306,6 +341,7 @@ class ChatController extends BaseController
         $validator = Validator::make($request->all(), [
             'message' => 'required_without:file|string|max:2000',
             'file' => 'nullable|file|max:10240', // 10MB max
+            'reply_to_id' => 'nullable|exists:chat_messages,id',
         ]);
 
         if ($validator->fails()) {
@@ -330,6 +366,17 @@ class ChatController extends BaseController
                 ];
             }
 
+            $replyToId = $request->input('reply_to_id');
+            if ($replyToId) {
+                $replyToMessage = ChatMessage::where('id', $replyToId)
+                    ->where('chat_room_id', $chatRoom->id)
+                    ->first();
+
+                if (!$replyToMessage) {
+                    return response()->json(['error' => 'Reply message was not found in this chat room'], 422);
+                }
+            }
+
             // Send message through Google Chat service
             $message = $this->getGoogleChatService()->sendChatMessage(
                 $chatRoom,
@@ -341,6 +388,11 @@ class ChatController extends BaseController
                 return response()->json(['error' => 'Failed to send message'], 500);
             }
 
+            if ($replyToId) {
+                $message->update(['reply_to_id' => $replyToId]);
+                $message->load(['replyTo.user']);
+            }
+
             $chatRoom->touch();
 
             return response()->json([
@@ -349,9 +401,21 @@ class ChatController extends BaseController
                     'id' => $message->id,
                     'message' => $message->message,
                     'message_type' => $message->message_type,
+                    'is_pinned' => $message->is_pinned,
+                    'reply_to' => $message->replyTo ? [
+                        'id' => $message->replyTo->id,
+                        'message' => $message->replyTo->message,
+                        'user_name' => $message->replyTo->user
+                            ? $message->replyTo->user->firstname . ' ' . $message->replyTo->user->lastname
+                            : 'Deleted User',
+                    ] : null,
                     'user' => [
                         'id' => $message->user->id,
                         'name' => $message->user->firstname . ' ' . $message->user->lastname,
+                        'initials' => strtoupper(substr($message->user->firstname ?? '', 0, 1) . substr($message->user->lastname ?? '', 0, 1)),
+                        'avatar_url' => $message->user->profile_picture_path
+                            ? route('profile.picture', $message->user) . '?v=' . optional($message->user->updated_at)->timestamp
+                            : null,
                     ],
                     'file_url' => $message->getFileUrl(),
                     'file_name' => $message->file_name,
@@ -768,6 +832,36 @@ class ChatController extends BaseController
                 'error' => $e->getMessage()
             ]);
             return response()->json(['error' => 'Failed to mark messages as seen: ' . $e->getMessage()], 500);
+        }
+    }
+
+    public function togglePin(ChatRoom $chatRoom, ChatMessage $message): JsonResponse
+    {
+        try {
+            $currentUser = Auth::user();
+
+            if (!$chatRoom->hasParticipant($currentUser)) {
+                return response()->json(['error' => 'Access denied'], 403);
+            }
+
+            if ($message->chat_room_id !== $chatRoom->id) {
+                return response()->json(['error' => 'Message not found in this chat room'], 404);
+            }
+
+            $message->update(['is_pinned' => !$message->is_pinned]);
+
+            return response()->json([
+                'success' => true,
+                'is_pinned' => $message->is_pinned,
+                'message' => $message->is_pinned ? 'Message pinned' : 'Message unpinned',
+            ]);
+        } catch (\Exception $e) {
+            \Log::error('Error toggling pin', [
+                'message_id' => $message->id,
+                'error' => $e->getMessage(),
+            ]);
+
+            return response()->json(['error' => 'Failed to update pinned message: ' . $e->getMessage()], 500);
         }
     }
 

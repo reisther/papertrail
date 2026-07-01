@@ -10,9 +10,9 @@
         </h2>
     </x-slot>
 <div class="min-h-screen bg-gray-50">
-    <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
-        <div class="mb-8">
-            <h1 class="text-3xl font-bold text-gray-900">Chat & Collaboration</h1>
+    <div class="max-w-7xl mx-auto px-3 sm:px-6 lg:px-8 py-4 sm:py-8">
+        <div class="mb-4 sm:mb-8">
+            <h1 class="text-2xl sm:text-3xl font-bold text-gray-900">Chat & Collaboration</h1>
             <p class="mt-2 text-gray-600">Communicate with your project team and advisers in real-time</p>
         </div>
 
@@ -24,9 +24,9 @@
             $showFolderSidebar = Auth::user()->isTeacher();
             $canCreateChatRooms = Auth::user()->canLeadGroup() || Auth::user()->isTeacher() || Auth::user()->isAdmin();
         @endphp
-        <div class="grid grid-cols-1 lg:grid-cols-4 gap-6 h-[calc(100vh-12rem)]">
+        <div class="grid grid-cols-1 lg:grid-cols-4 gap-4 lg:gap-6 lg:h-[calc(100vh-12rem)]">
             <!-- Chat Rooms Sidebar -->
-            <div class="lg:col-span-1 bg-white rounded-lg shadow-sm border border-gray-200 overflow-hidden">
+            <div id="chatSidebar" class="lg:col-span-1 bg-white rounded-lg shadow-sm border border-gray-200 overflow-hidden max-h-72 lg:max-h-none">
                 <div class="p-4 border-b border-gray-200 bg-gray-50">
                     <div class="flex items-center justify-between">
                         <h2 class="text-lg font-semibold text-gray-900">Chat Rooms</h2>
@@ -80,14 +80,20 @@
             </div>
 
             <!-- Chat Interface -->
-            <div class="lg:col-span-3 bg-white rounded-lg shadow-sm border border-gray-200 overflow-hidden flex flex-col">
+            <div id="chatPanel" class="lg:col-span-3 bg-white rounded-lg shadow-sm border border-gray-200 overflow-hidden flex flex-col min-h-[70vh] lg:min-h-0">
                 <div id="chatHeader" class="p-4 border-b border-gray-200 bg-gray-50 hidden">
-                    <div class="flex items-center justify-between">
-                        <div>
+                    <div class="flex items-center justify-between gap-3">
+                        <div class="min-w-0">
                             <h3 id="chatRoomName" class="text-lg font-semibold text-gray-900"></h3>
                             <p id="chatRoomDescription" class="text-sm text-gray-600"></p>
                         </div>
-                        <div class="flex items-center space-x-2">
+                        <div class="flex shrink-0 items-center space-x-1 sm:space-x-2">
+                            <button id="pinnedMessagesButton" onclick="togglePinnedMessagesPanel()" class="relative text-gray-400 hover:text-yellow-700 p-2 rounded-lg hover:bg-yellow-50" title="View Pinned Messages">
+                                <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 4l5 5-4 4v5l-2 2-5-5-4 4-1-1 4-4-5-5 2-2h5l4-4z"></path>
+                                </svg>
+                                <span id="pinnedMessagesCount" class="hidden absolute -right-1 -top-1 min-w-5 h-5 rounded-full bg-yellow-500 px-1 text-center text-[11px] font-semibold leading-5 text-white"></span>
+                            </button>
                             <button onclick="showParticipants()" class="text-gray-400 hover:text-gray-600 p-2 rounded-lg hover:bg-gray-100" title="View Participants">
                                 <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                     <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4.354a4 4 0 110 5.292M15 21H3v-1a6 6 0 0112 0v1zm0 0h6v-1a6 6 0 00-9-2.239"></path>
@@ -108,7 +114,9 @@
                 </div>
 
                 <!-- Messages Area -->
-                <div id="messagesContainer" class="flex-1 overflow-y-auto p-4 space-y-4 hidden">
+                <div id="pinnedMessagesPanel" class="hidden border-b border-yellow-200 bg-yellow-50 px-4 py-3"></div>
+
+                <div id="messagesContainer" class="flex-1 overflow-y-auto p-3 sm:p-4 space-y-4 hidden">
                     <!-- Messages will be loaded here -->
                 </div>
 
@@ -134,11 +142,24 @@
                 </div>
 
                 <!-- Message Input -->
-                <div id="messageInput" class="p-4 border-t border-gray-200 hidden">
-                    <form id="sendMessageForm" class="flex items-end space-x-3">
+                <div id="messageInput" class="p-3 sm:p-4 border-t border-gray-200 hidden">
+                    <div id="replyPreview" class="hidden mb-3 rounded-md border-l-4 border-blue-500 bg-blue-50 px-3 py-2 text-sm">
+                        <div class="flex items-start justify-between gap-3">
+                            <div class="min-w-0">
+                                <p class="font-semibold text-blue-800">Replying to <span id="replyPreviewUser"></span></p>
+                                <p id="replyPreviewText" class="truncate text-blue-700"></p>
+                            </div>
+                            <button type="button" onclick="clearReply()" class="shrink-0 text-blue-500 hover:text-blue-700" title="Cancel reply">
+                                <svg class="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path>
+                                </svg>
+                            </button>
+                        </div>
+                    </div>
+                    <form id="sendMessageForm" class="flex items-end gap-2 sm:gap-3">
                         <div class="flex-1">
-                            <div class="flex items-end space-x-2">
-                                <button type="button" onclick="toggleFileUpload()" class="text-gray-400 hover:text-gray-600 p-2">
+                            <div class="flex items-end gap-2">
+                                <button type="button" onclick="toggleFileUpload()" class="text-gray-400 hover:text-gray-600 p-2" title="Attach file">
                                     <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                         <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15.172 7l-6.586 6.586a2 2 0 102.828 2.828l6.414-6.586a4 4 0 00-5.656-5.656l-6.415 6.585a6 6 0 108.486 8.486L20.5 13"></path>
                                     </svg>
@@ -162,7 +183,7 @@
                                 </div>
                             </div>
                         </div>
-                        <button type="submit" class="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-md transition-colors">
+                        <button type="submit" class="shrink-0 bg-blue-600 hover:bg-blue-700 text-white px-3 sm:px-4 py-2 rounded-md transition-colors" title="Send message">
                             <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                 <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 19l9 2-9-18-9 18 9-2zm0 0v-8"></path>
                             </svg>
@@ -420,6 +441,9 @@ let messagePollingInterval = null;
 let confirmationCallback = null;
 let isInitialLoad = false;
 let shouldScrollToBottom = false;
+let selectedReplyMessage = null;
+let currentMessagesById = {};
+let currentPinnedMessages = [];
 
 // Modal functions
 function showNotification(title, message, type = 'info') {
@@ -473,6 +497,16 @@ function handleConfirmation() {
 
 // Initialize chat interface
 document.addEventListener('DOMContentLoaded', function() {
+    const requestedRoomId = @json(request('room'));
+    const requestedRoom = requestedRoomId
+        ? document.querySelector(`.chat-room-item[data-room-id="${requestedRoomId}"]`)
+        : null;
+
+    if (requestedRoom) {
+        selectChatRoom(requestedRoomId);
+        return;
+    }
+
     // Auto-select first room if available
     const firstRoom = document.querySelector('.chat-room-item');
     if (firstRoom) {
@@ -500,6 +534,9 @@ function selectChatRoom(roomId) {
     document.getElementById('chatHeader').classList.remove('hidden');
     document.getElementById('messagesContainer').classList.remove('hidden');
     document.getElementById('messageInput').classList.remove('hidden');
+    document.getElementById('chatPanel').scrollIntoView({ behavior: 'smooth', block: 'start' });
+    clearReply();
+    renderPinnedMessages([]);
     
     // Set flag for initial load
     isInitialLoad = true;
@@ -568,35 +605,51 @@ async function loadMessages(roomId) {
 function displayMessages(messages) {
     const container = document.getElementById('messagesContainer');
     const currentUserId = {{ Auth::id() }};
+    currentMessagesById = Object.fromEntries(messages.map(message => [message.id, message]));
+    renderPinnedMessages(messages);
     
     container.innerHTML = messages.map(message => {
         const isOwnMessage = message.user.id === currentUserId;
         const messageClass = isOwnMessage ? 'ml-auto bg-blue-600 text-white' : 'mr-auto bg-gray-100 text-gray-900';
+        const avatarHtml = renderMessageAvatar(message.user);
         
         return `
-            <div class="flex ${isOwnMessage ? 'justify-end' : 'justify-start'} group" data-message-id="${message.id}">
-                <div class="max-w-xs lg:max-w-md px-4 py-2 rounded-lg ${messageClass} relative message-content">
-                    ${!isOwnMessage ? `<div class="text-xs font-medium mb-1 ${isOwnMessage ? 'text-blue-100' : 'text-gray-600'}">${message.user.name}</div>` : ''}
-                    <div class="text-sm">${message.message}</div>
+            <div class="flex ${isOwnMessage ? 'justify-end' : 'justify-start'} gap-2 group" data-message-id="${message.id}">
+                ${!isOwnMessage ? avatarHtml : ''}
+                <div class="flex max-w-[calc(100%-2.5rem)] flex-col ${isOwnMessage ? 'items-end' : 'items-start'}">
+                <div class="w-fit max-w-full sm:max-w-md lg:max-w-lg px-4 py-2 rounded-lg ${messageClass} relative message-content">
+                    ${!isOwnMessage ? `<div class="text-xs font-medium mb-1 ${isOwnMessage ? 'text-blue-100' : 'text-gray-600'}">${escapeHtml(message.user.name)}</div>` : ''}
+                    ${message.is_pinned ? `<span class="mb-2 inline-flex items-center rounded-full bg-yellow-100 px-2 py-0.5 text-[11px] font-semibold text-yellow-800">Pinned</span>` : ''}
+                    ${message.reply_to ? `
+                        <button type="button" onclick="scrollToMessage(${message.reply_to.id})"
+                                class="mb-2 block w-full rounded border-l-4 ${isOwnMessage ? 'border-blue-200 bg-blue-500 text-blue-50' : 'border-blue-500 bg-white text-gray-700'} px-2 py-1 text-left text-xs">
+                            <span class="block font-semibold">${escapeHtml(message.reply_to.user_name)}</span>
+                            <span class="block truncate">${escapeHtml(message.reply_to.message)}</span>
+                        </button>
+                    ` : ''}
+                    ${message.message && !(message.file_url && message.message === 'File shared') ? `<div class="break-words text-sm whitespace-pre-wrap">${escapeHtml(message.message)}</div>` : ''}
                     ${message.file_url ? `
                         <div class="mt-2">
                             ${message.is_image ? 
-                                `<img src="${message.file_url}" alt="${message.file_name}" class="max-w-full rounded">` :
-                                `<a href="${message.file_url}" target="_blank" class="inline-flex items-center text-xs underline">
+                                `<a href="${message.file_url}" target="_blank" rel="noopener" class="block">
+                                    <img src="${message.file_url}" alt="${escapeHtml(message.file_name || 'Shared image')}" class="max-h-80 w-auto max-w-full rounded-md object-contain border ${isOwnMessage ? 'border-blue-400' : 'border-gray-200'}" loading="lazy">
+                                </a>
+                                <a href="${message.file_url}" target="_blank" rel="noopener" class="mt-1 inline-block text-xs underline ${isOwnMessage ? 'text-blue-100' : 'text-gray-500'}">${escapeHtml(message.file_name || 'Open image')}</a>` :
+                                `<a href="${message.file_url}" target="_blank" rel="noopener" class="inline-flex items-center break-all text-xs underline">
                                     <svg class="w-4 h-4 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                         <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15.172 7l-6.586 6.586a2 2 0 102.828 2.828l6.414-6.586a4 4 0 00-5.656-5.656l-6.415 6.585a6 6 0 108.486 8.486L20.5 13"></path>
                                     </svg>
-                                    ${message.file_name} (${message.file_size})
+                                    ${escapeHtml(message.file_name || 'Attachment')} (${escapeHtml(message.file_size || '')})
                                 </a>`
                             }
                         </div>
                     ` : ''}
-                    <div class="flex items-center justify-between mt-1">
+                    <div class="hidden">
                         <div class="text-xs ${isOwnMessage ? 'text-blue-100' : 'text-gray-500'}">
                             ${message.created_at_human}
                             ${message.seen_by_count > 0 ? `<span class="ml-2">✓ Seen by ${message.seen_by_count}</span>` : ''}
                         </div>
-                        <div class="flex items-center space-x-1">
+                        <div class="hidden">
                             ${message.can_delete ? `
                                 <button onclick="showDeleteOptions(${message.id})" class="opacity-0 group-hover:opacity-100 transition-opacity text-xs ${isOwnMessage ? 'text-blue-100 hover:text-white' : 'text-gray-400 hover:text-gray-600'}">
                                     ⋯
@@ -607,18 +660,48 @@ function displayMessages(messages) {
                             </button>
                         </div>
                     </div>
+                    <div class="mt-1 flex items-center justify-between gap-3 text-xs ${isOwnMessage ? 'text-blue-100' : 'text-gray-500'}">
+                        <div class="min-w-0 truncate">
+                            ${message.created_at_human}
+                            ${message.seen_by_count > 0 ? `<span class="ml-2">Seen by ${message.seen_by_count}</span>` : ''}
+                        </div>
+                        <div class="flex shrink-0 items-center gap-0.5 opacity-100 sm:opacity-0 sm:group-hover:opacity-100 sm:focus-within:opacity-100">
+                            <button type="button" onclick="startReply(${message.id})" class="inline-flex h-6 w-6 items-center justify-center rounded-full ${isOwnMessage ? 'hover:bg-blue-500 hover:text-white' : 'hover:bg-gray-200 hover:text-gray-800'}" title="Reply">
+                                <svg class="h-3.5 w-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 14l-4-4m0 0l4-4m-4 4h11a4 4 0 014 4v2"></path>
+                                </svg>
+                            </button>
+                            <button type="button" onclick="togglePin(${message.id})" class="inline-flex h-6 w-6 items-center justify-center rounded-full ${message.is_pinned ? 'bg-yellow-100 text-yellow-800' : (isOwnMessage ? 'hover:bg-blue-500 hover:text-white' : 'hover:bg-gray-200 hover:text-yellow-700')}" title="${message.is_pinned ? 'Unpin message' : 'Pin message'}">
+                                <svg class="h-3.5 w-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 4l5 5-4 4v5l-2 2-5-5-4 4-1-1 4-4-5-5 2-2h5l4-4z"></path>
+                                </svg>
+                            </button>
+                            <button type="button" onclick="showEmojiPicker(${message.id})" class="inline-flex h-6 w-6 items-center justify-center rounded-full ${isOwnMessage ? 'hover:bg-blue-500 hover:text-white' : 'hover:bg-gray-200 hover:text-gray-800'}" title="React">
+                                <span class="text-xs leading-none">+</span>
+                            </button>
+                            ${message.can_delete ? `
+                                <button type="button" onclick="showDeleteOptions(${message.id})" class="inline-flex h-6 w-6 items-center justify-center rounded-full ${isOwnMessage ? 'hover:bg-blue-500 hover:text-white' : 'hover:bg-red-50 hover:text-red-700'}" title="Delete">
+                                    <svg class="h-3.5 w-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"></path>
+                                    </svg>
+                                </button>
+                            ` : ''}
+                        </div>
+                    </div>
                     ${message.reactions && message.reactions.length > 0 ? `
                         <div class="flex flex-wrap gap-1 mt-2">
                             ${message.reactions.map(reaction => `
                                 <button onclick="toggleReaction(${message.id}, '${reaction.emoji}')" 
                                         class="inline-flex items-center px-2 py-1 rounded-full text-xs border transition-colors ${reaction.user_ids.includes(currentUserId) ? 'bg-blue-100 border-blue-300 text-blue-800' : 'bg-gray-100 border-gray-300 text-gray-600 hover:bg-gray-200'}"
-                                        title="${reaction.users.map(u => u.name).join(', ')}">
+                                        title="${escapeHtml(reaction.users.map(u => u.name).join(', '))}">
                                     ${reaction.emoji} ${reaction.count}
                                 </button>
                             `).join('')}
                         </div>
                     ` : ''}
                 </div>
+                </div>
+                ${isOwnMessage ? avatarHtml : ''}
             </div>
         `;
     }).join('');
@@ -636,6 +719,137 @@ function displayMessages(messages) {
         isInitialLoad = false; // Reset flag after initial scroll
         shouldScrollToBottom = false; // Reset flag after forced scroll
     }
+}
+
+function renderPinnedMessages(messages) {
+    const panel = document.getElementById('pinnedMessagesPanel');
+    const count = document.getElementById('pinnedMessagesCount');
+    currentPinnedMessages = messages.filter(message => message.is_pinned);
+
+    if (!currentPinnedMessages.length) {
+        panel.classList.add('hidden');
+        panel.innerHTML = '';
+        count.classList.add('hidden');
+        count.textContent = '';
+        return;
+    }
+
+    count.classList.remove('hidden');
+    count.textContent = currentPinnedMessages.length > 9 ? '9+' : currentPinnedMessages.length;
+
+    panel.innerHTML = `
+        <div class="flex items-start justify-between gap-3">
+            <div>
+                <div class="text-sm font-semibold text-yellow-900">Pinned messages</div>
+                <div class="mt-2 space-y-2">
+                    ${currentPinnedMessages.map(message => `
+                        <button type="button" onclick="scrollToMessage(${message.id}); closePinnedMessagesPanel();" class="block w-full rounded-md border border-yellow-200 bg-white px-3 py-2 text-left text-sm text-gray-700 hover:border-yellow-300 hover:bg-yellow-100">
+                            <span class="block font-semibold text-gray-900">${escapeHtml(message.user.name)}</span>
+                            <span class="block truncate">${escapeHtml(message.message || message.file_name || 'Attachment')}</span>
+                        </button>
+                    `).join('')}
+                </div>
+            </div>
+            <button type="button" onclick="closePinnedMessagesPanel()" class="shrink-0 rounded-md p-1 text-yellow-700 hover:bg-yellow-100" title="Close pinned messages">
+                <svg class="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path>
+                </svg>
+            </button>
+        </div>
+    `;
+}
+
+function togglePinnedMessagesPanel() {
+    if (!currentPinnedMessages.length) {
+        showNotification('Pinned Messages', 'There are no pinned messages in this chat yet.');
+        return;
+    }
+
+    document.getElementById('pinnedMessagesPanel').classList.toggle('hidden');
+}
+
+function closePinnedMessagesPanel() {
+    document.getElementById('pinnedMessagesPanel').classList.add('hidden');
+}
+
+function startReply(messageId) {
+    const message = currentMessagesById[messageId];
+    if (!message) return;
+
+    selectedReplyMessage = message;
+    document.getElementById('replyPreviewUser').textContent = message.user.name;
+    document.getElementById('replyPreviewText').textContent = message.message || message.file_name || 'Attachment';
+    document.getElementById('replyPreview').classList.remove('hidden');
+    document.getElementById('messageText').focus();
+}
+
+function clearReply() {
+    selectedReplyMessage = null;
+    document.getElementById('replyPreview').classList.add('hidden');
+    document.getElementById('replyPreviewUser').textContent = '';
+    document.getElementById('replyPreviewText').textContent = '';
+}
+
+function scrollToMessage(messageId) {
+    const messageElement = document.querySelector(`[data-message-id="${messageId}"]`);
+    if (!messageElement) return;
+
+    messageElement.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    messageElement.classList.add('ring-2', 'ring-yellow-300', 'rounded-lg');
+    setTimeout(() => {
+        messageElement.classList.remove('ring-2', 'ring-yellow-300', 'rounded-lg');
+    }, 1400);
+}
+
+async function togglePin(messageId) {
+    if (!currentRoomId) return;
+
+    try {
+        const response = await fetch(`/chat/rooms/${currentRoomId}/messages/${messageId}/pin`, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'X-CSRF-TOKEN': document.querySelector('meta[name="csrf-token"]').getAttribute('content')
+            }
+        });
+
+        const result = await response.json();
+
+        if (result.success) {
+            loadMessages(currentRoomId);
+        } else {
+            showNotification('Error', result.error || 'Failed to update pinned message', 'error');
+        }
+    } catch (error) {
+        console.error('Error toggling pin:', error);
+        showNotification('Network Error', 'Failed to update pinned message. Please check your connection.', 'error');
+    }
+}
+
+function escapeHtml(value) {
+    return String(value ?? '')
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;')
+        .replace(/'/g, '&#039;');
+}
+
+function renderMessageAvatar(user) {
+    const initials = escapeHtml(user?.initials || '?');
+    const name = escapeHtml(user?.name || 'User');
+
+    if (user?.avatar_url) {
+        return `
+            <img src="${escapeHtml(user.avatar_url)}" alt="${name}" class="mt-1 h-8 w-8 shrink-0 rounded-full border border-gray-200 object-cover">
+        `;
+    }
+
+    return `
+        <div class="mt-1 flex h-8 w-8 shrink-0 items-center justify-center rounded-full border border-blue-100 bg-blue-50 text-xs font-semibold text-blue-700">
+            ${initials}
+        </div>
+    `;
 }
 
 // Delete message functions
@@ -683,6 +897,7 @@ document.getElementById('sendMessageForm').addEventListener('submit', async func
     const formData = new FormData();
     if (messageText) formData.append('message', messageText);
     if (fileInput.files[0]) formData.append('file', fileInput.files[0]);
+    if (selectedReplyMessage) formData.append('reply_to_id', selectedReplyMessage.id);
     
     try {
         const response = await fetch(`/chat/rooms/${currentRoomId}/messages`, {
@@ -701,6 +916,7 @@ document.getElementById('sendMessageForm').addEventListener('submit', async func
         if (data.success) {
             document.getElementById('messageText').value = '';
             clearFileSelection();
+            clearReply();
             shouldScrollToBottom = true; // Force scroll after sending message
             loadMessages(currentRoomId);
         } else {
@@ -1108,7 +1324,7 @@ function updateMessageReactions(messageId, reactions) {
                         ${reactions.map(reaction => `
                             <button onclick="toggleReaction(${messageId}, '${reaction.emoji}')" 
                                     class="inline-flex items-center px-2 py-1 rounded-full text-xs border transition-colors ${reaction.user_ids.includes(currentUserId) ? 'bg-blue-100 border-blue-300 text-blue-800' : 'bg-gray-100 border-gray-300 text-gray-600 hover:bg-gray-200'}"
-                                    title="${reaction.users.map(u => u.name).join(', ')}">
+                                    title="${escapeHtml(reaction.users.map(u => u.name).join(', '))}">
                                 ${reaction.emoji} ${reaction.count}
                             </button>
                         `).join('')}

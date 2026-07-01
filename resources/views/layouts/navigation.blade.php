@@ -1,3 +1,17 @@
+@php
+    $chatUnreadCount = 0;
+    $notificationUnreadCount = 0;
+
+    if (Auth::check()) {
+        $chatUnreadCount = Auth::user()->chatRooms()
+            ->where('chat_rooms.is_active', true)
+            ->get()
+            ->sum(fn ($room) => $room->getUnreadCountForUser(Auth::user()));
+
+        $notificationUnreadCount = $chatUnreadCount;
+    }
+@endphp
+
  <!-- Header Navigation -->
     <header class="bg-white border-b border-gray-200" x-data="{ mobileOpen: false }">
         <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
@@ -57,11 +71,25 @@
 
                         @if(Auth::user()->isStudentGroupRole() || Auth::user()->isTeacher())
                             <a href="{{ route('chat.index') }}"
-                                class="text-gray-500 hover:text-blue-600 px-3 py-2 text-sm font-medium transition-colors">Chat</a>
+                                class="relative inline-flex items-center text-gray-500 hover:text-blue-600 px-3 py-2 text-sm font-medium transition-colors">
+                                Chat
+                                @if($chatUnreadCount > 0)
+                                    <span class="ml-2 min-w-5 h-5 rounded-full bg-red-600 px-1.5 text-center text-[11px] font-semibold leading-5 text-white">
+                                        {{ $chatUnreadCount > 99 ? '99+' : $chatUnreadCount }}
+                                    </span>
+                                @endif
+                            </a>
                         @endif
 
                         <a href="{{ route('notifications.index') }}"
-                            class="text-gray-500 hover:text-blue-600 px-3 py-2 text-sm font-medium transition-colors">Notifications</a>
+                            class="relative inline-flex items-center text-gray-500 hover:text-blue-600 px-3 py-2 text-sm font-medium transition-colors">
+                            Notifications
+                            @if($notificationUnreadCount > 0)
+                                <span class="ml-2 min-w-5 h-5 rounded-full bg-red-600 px-1.5 text-center text-[11px] font-semibold leading-5 text-white">
+                                    {{ $notificationUnreadCount > 99 ? '99+' : $notificationUnreadCount }}
+                                </span>
+                            @endif
+                        </a>
                     @else
                         <a href="{{ route('dashboard') }}"
                             class="text-gray-900 hover:text-blue-600 px-3 py-2 text-sm font-medium transition-colors">Dashboard</a>
@@ -140,12 +168,35 @@
                         <a href="{{ route('admin.dashboard') }}" class="block px-3 py-2 text-sm font-medium text-gray-900 hover:text-blue-600">Dashboard</a>
                         <a href="{{ route('admin.pending-users') }}" class="block px-3 py-2 text-sm font-medium text-gray-500 hover:text-blue-600">Verify Users</a>
                         <a href="{{ route('admin.all-users') }}" class="block px-3 py-2 text-sm font-medium text-gray-500 hover:text-blue-600">User Management</a>
+                        <a href="{{ route('notifications.index') }}" class="flex items-center justify-between px-3 py-2 text-sm font-medium text-gray-500 hover:text-blue-600">
+                            <span>Notifications</span>
+                            @if($notificationUnreadCount > 0)
+                                <span class="min-w-5 h-5 rounded-full bg-red-600 px-1.5 text-center text-[11px] font-semibold leading-5 text-white">
+                                    {{ $notificationUnreadCount > 99 ? '99+' : $notificationUnreadCount }}
+                                </span>
+                            @endif
+                        </a>
                     @elseif(Auth::user()->role === 'Teacher')
                         <a href="{{ route('teacher.dashboard') }}" class="block px-3 py-2 text-sm font-medium text-gray-900 hover:text-blue-600">Dashboard</a>
                         <a href="{{ route('projects.index') }}" class="block px-3 py-2 text-sm font-medium text-gray-500 hover:text-blue-600">Projects</a>
                         <a href="{{ route('advisers.pending-requests') }}" class="block px-3 py-2 text-sm font-medium text-gray-500 hover:text-blue-600">Student Requests</a>
                         <a href="{{ route('defense-schedule.index') }}" class="block px-3 py-2 text-sm font-medium text-gray-500 hover:text-blue-600">Defense Schedule</a>
-                        <a href="{{ route('chat.index') }}" class="block px-3 py-2 text-sm font-medium text-gray-500 hover:text-blue-600">Chat</a>
+                        <a href="{{ route('chat.index') }}" class="flex items-center justify-between px-3 py-2 text-sm font-medium text-gray-500 hover:text-blue-600">
+                            <span>Chat</span>
+                            @if($chatUnreadCount > 0)
+                                <span class="min-w-5 h-5 rounded-full bg-red-600 px-1.5 text-center text-[11px] font-semibold leading-5 text-white">
+                                    {{ $chatUnreadCount > 99 ? '99+' : $chatUnreadCount }}
+                                </span>
+                            @endif
+                        </a>
+                        <a href="{{ route('notifications.index') }}" class="flex items-center justify-between px-3 py-2 text-sm font-medium text-gray-500 hover:text-blue-600">
+                            <span>Notifications</span>
+                            @if($notificationUnreadCount > 0)
+                                <span class="min-w-5 h-5 rounded-full bg-red-600 px-1.5 text-center text-[11px] font-semibold leading-5 text-white">
+                                    {{ $notificationUnreadCount > 99 ? '99+' : $notificationUnreadCount }}
+                                </span>
+                            @endif
+                        </a>
                     @else
                         <a href="{{ route('dashboard') }}" class="block px-3 py-2 text-sm font-medium text-gray-900 hover:text-blue-600">Dashboard</a>
                         <a href="{{ route('projects.index') }}" class="block px-3 py-2 text-sm font-medium text-gray-500 hover:text-blue-600">Projects</a>
@@ -153,8 +204,22 @@
                             <a href="{{ route('advisers.title-submission') }}" class="block px-3 py-2 text-sm font-medium text-gray-500 hover:text-blue-600">Find Advisers</a>
                         @endif
                         <a href="{{ route('defense-schedule.index') }}" class="block px-3 py-2 text-sm font-medium text-gray-500 hover:text-blue-600">Defense Schedule</a>
-                        <a href="{{ route('chat.index') }}" class="block px-3 py-2 text-sm font-medium text-gray-500 hover:text-blue-600">Chat</a>
-                        <a href="{{ route('notifications.index') }}" class="block px-3 py-2 text-sm font-medium text-gray-500 hover:text-blue-600">Notifications</a>
+                        <a href="{{ route('chat.index') }}" class="flex items-center justify-between px-3 py-2 text-sm font-medium text-gray-500 hover:text-blue-600">
+                            <span>Chat</span>
+                            @if($chatUnreadCount > 0)
+                                <span class="min-w-5 h-5 rounded-full bg-red-600 px-1.5 text-center text-[11px] font-semibold leading-5 text-white">
+                                    {{ $chatUnreadCount > 99 ? '99+' : $chatUnreadCount }}
+                                </span>
+                            @endif
+                        </a>
+                        <a href="{{ route('notifications.index') }}" class="flex items-center justify-between px-3 py-2 text-sm font-medium text-gray-500 hover:text-blue-600">
+                            <span>Notifications</span>
+                            @if($notificationUnreadCount > 0)
+                                <span class="min-w-5 h-5 rounded-full bg-red-600 px-1.5 text-center text-[11px] font-semibold leading-5 text-white">
+                                    {{ $notificationUnreadCount > 99 ? '99+' : $notificationUnreadCount }}
+                                </span>
+                            @endif
+                        </a>
                     @endif
                 @else
                     <a href="{{ route('dashboard') }}" class="block px-3 py-2 text-sm font-medium text-gray-900 hover:text-blue-600">Dashboard</a>

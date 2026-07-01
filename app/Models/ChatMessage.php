@@ -11,6 +11,7 @@ class ChatMessage extends Model
     protected $fillable = [
         'chat_room_id',
         'user_id',
+        'reply_to_id',
         'message',
         'message_type',
         'file_path',
@@ -23,6 +24,7 @@ class ChatMessage extends Model
         'edited_at',
         'seen_by',
         'deleted_for_users',
+        'is_pinned',
     ];
 
     protected $casts = [
@@ -31,6 +33,7 @@ class ChatMessage extends Model
         'edited_at' => 'datetime',
         'seen_by' => 'array',
         'deleted_for_users' => 'array',
+        'is_pinned' => 'boolean',
     ];
 
     /**
@@ -47,6 +50,11 @@ class ChatMessage extends Model
     public function user(): BelongsTo
     {
         return $this->belongsTo(User::class);
+    }
+
+    public function replyTo(): BelongsTo
+    {
+        return $this->belongsTo(ChatMessage::class, 'reply_to_id');
     }
 
     /**
@@ -66,7 +74,7 @@ class ChatMessage extends Model
             return null;
         }
 
-        return asset('storage/' . $this->file_path);
+        return route('chat.files.show', $this);
     }
 
     /**

@@ -83,7 +83,27 @@ Route::middleware('auth')->group(function () {
     Route::patch('/profile', [ProfileController::class, 'update'])->name('profile.update');
     Route::delete('/profile', [ProfileController::class, 'destroy'])->name('profile.destroy');
     Route::get('/notifications', function () {
-        return view('notifications.index');
+        $user = Auth::user();
+
+        $chatNotifications = $user->chatRooms()
+            ->where('chat_rooms.is_active', true)
+            ->with(['latestMessage.user', 'project'])
+            ->get()
+            ->map(function ($room) use ($user) {
+                $unreadCount = $room->getUnreadCountForUser($user);
+                $latestMessage = $room->latestMessage->first();
+
+                return [
+                    'room' => $room,
+                    'unread_count' => $unreadCount,
+                    'latest_message' => $latestMessage,
+                ];
+            })
+            ->filter(fn ($notification) => $notification['unread_count'] > 0)
+            ->sortByDesc(fn ($notification) => optional($notification['latest_message'])->created_at)
+            ->values();
+
+        return view('notifications.index', compact('chatNotifications'));
     })->name('notifications.index');
     
     // Adviser routes
@@ -140,6 +160,7 @@ Route::middleware('auth')->group(function () {
     // Chat routes
     Route::prefix('chat')->name('chat.')->middleware('auth')->group(function () {
         Route::get('/', [ChatController::class, 'index'])->name('index');
+        Route::get('/files/{message}', [ChatController::class, 'showFile'])->name('files.show');
         Route::post('/rooms', [ChatController::class, 'store'])->name('rooms.store');
         Route::get('/rooms/{chatRoom}', [ChatController::class, 'show'])->name('rooms.show');
         Route::get('/rooms/{chatRoom}/messages', [ChatController::class, 'getMessages'])->name('rooms.messages');
@@ -151,6 +172,7 @@ Route::middleware('auth')->group(function () {
         Route::delete('/rooms/{chatRoom}/participants', [ChatController::class, 'removeParticipant'])->name('rooms.remove-participant');
         Route::get('/rooms/{chatRoom}/available-users', [ChatController::class, 'getAvailableUsers'])->name('rooms.available-users');
         Route::delete('/rooms/{chatRoom}/messages/{message}', [ChatController::class, 'deleteMessage'])->name('rooms.delete-message');
+        Route::post('/rooms/{chatRoom}/messages/{message}/pin', [ChatController::class, 'togglePin'])->name('rooms.messages.toggle-pin');
         Route::post('/rooms/{chatRoom}/messages/seen', [ChatController::class, 'markAsSeen'])->name('rooms.mark-seen');
         
         // New features
