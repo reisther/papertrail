@@ -27,7 +27,7 @@
         <div class="grid grid-cols-1 lg:grid-cols-4 gap-4 lg:gap-6 lg:h-[calc(100vh-12rem)]">
             <!-- Chat Rooms Sidebar -->
             <div id="chatSidebar" class="lg:col-span-1 bg-white rounded-lg shadow-sm border border-gray-200 overflow-hidden max-h-72 lg:max-h-none">
-                <div class="p-4 border-b border-gray-200 bg-gray-50">
+                <div class="sticky top-0 z-10 p-4 border-b border-gray-200 bg-gray-50">
                     <div class="flex items-center justify-between">
                         <h2 class="text-lg font-semibold text-gray-900">Chat Rooms</h2>
                         @if($canCreateChatRooms)
@@ -81,9 +81,15 @@
 
             <!-- Chat Interface -->
             <div id="chatPanel" class="lg:col-span-3 bg-white rounded-lg shadow-sm border border-gray-200 overflow-hidden flex flex-col min-h-[70vh] lg:min-h-0">
-                <div id="chatHeader" class="p-4 border-b border-gray-200 bg-gray-50 hidden">
+                <div id="chatHeader" class="sticky top-0 z-20 p-3 sm:p-4 border-b border-gray-200 bg-gray-50 hidden">
                     <div class="flex items-center justify-between gap-3">
-                        <div class="min-w-0">
+                        <button type="button" onclick="scrollToChatRooms()" class="lg:hidden inline-flex shrink-0 items-center gap-1 rounded-md border border-gray-200 bg-white px-2.5 py-2 text-sm font-medium text-gray-700 shadow-sm hover:bg-gray-50" title="Back to chat rooms">
+                            <svg class="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 19l-7-7 7-7"></path>
+                            </svg>
+                            <span>Rooms</span>
+                        </button>
+                        <div class="min-w-0 flex-1">
                             <h3 id="chatRoomName" class="text-lg font-semibold text-gray-900"></h3>
                             <p id="chatRoomDescription" class="text-sm text-gray-600"></p>
                         </div>
@@ -556,6 +562,18 @@ function selectChatRoom(roomId) {
         clearInterval(window.typingPollingInterval);
     }
     window.typingPollingInterval = setInterval(getTypingUsers, 2000); // Check every 2 seconds
+}
+
+function scrollToChatRooms() {
+    const sidebar = document.getElementById('chatSidebar');
+    if (!sidebar) return;
+
+    sidebar.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    sidebar.classList.add('ring-2', 'ring-blue-200');
+
+    setTimeout(() => {
+        sidebar.classList.remove('ring-2', 'ring-blue-200');
+    }, 1200);
 }
 
 // Load chat room details
