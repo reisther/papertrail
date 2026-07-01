@@ -72,7 +72,6 @@ Admins can manage users, adviser assignments, and system-level records.
 | **MySQL**                 | Database management                |
 | **Python**                | AI processing and analysis         |
 | **Railway**               | Deployment platform                |
-| **Bunny Fonts / Poppins** | Application typography             |
 
 ---
 
