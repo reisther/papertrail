@@ -24,9 +24,9 @@
             $showFolderSidebar = Auth::user()->isTeacher();
             $canCreateChatRooms = Auth::user()->canLeadGroup() || Auth::user()->isTeacher() || Auth::user()->isAdmin();
         @endphp
-        <div class="grid grid-cols-1 lg:grid-cols-4 gap-4 lg:gap-6 lg:h-[calc(100vh-12rem)]">
+        <div id="chatLayout" class="grid grid-cols-1 lg:grid-cols-4 gap-4 lg:gap-6 lg:h-[calc(100vh-12rem)]">
             <!-- Chat Rooms Sidebar -->
-            <div id="chatSidebar" class="lg:col-span-1 bg-white rounded-lg shadow-sm border border-gray-200 overflow-hidden max-h-72 lg:max-h-none">
+            <div id="chatSidebar" class="lg:col-span-1 bg-white rounded-lg shadow-sm border border-gray-200 overflow-hidden max-h-[calc(100vh-9rem)] lg:max-h-none">
                 <div class="sticky top-0 z-10 p-4 border-b border-gray-200 bg-gray-50">
                     <div class="flex items-center justify-between">
                         <h2 class="text-lg font-semibold text-gray-900">Chat Rooms</h2>
@@ -80,10 +80,10 @@
             </div>
 
             <!-- Chat Interface -->
-            <div id="chatPanel" class="lg:col-span-3 bg-white rounded-lg shadow-sm border border-gray-200 overflow-hidden flex flex-col min-h-[70vh] lg:min-h-0">
-                <div id="chatHeader" class="sticky top-0 z-20 p-3 sm:p-4 border-b border-gray-200 bg-gray-50 hidden">
+            <div id="chatPanel" class="hidden lg:col-span-3 bg-white rounded-lg shadow-sm border border-gray-200 overflow-visible lg:overflow-hidden flex-col min-h-[calc(100vh-9rem)] lg:min-h-0 lg:flex">
+                <div id="chatHeader" class="fixed lg:sticky top-16 lg:top-0 left-0 right-0 lg:left-auto lg:right-auto z-40 p-3 sm:p-4 border-b border-gray-200 bg-gray-50 shadow-sm lg:shadow-none hidden">
                     <div class="flex items-center justify-between gap-3">
-                        <button type="button" onclick="scrollToChatRooms()" class="lg:hidden inline-flex shrink-0 items-center gap-1 rounded-md border border-gray-200 bg-white px-2.5 py-2 text-sm font-medium text-gray-700 shadow-sm hover:bg-gray-50" title="Back to chat rooms">
+                        <button type="button" onclick="showChatRoomsView()" class="lg:hidden inline-flex shrink-0 items-center gap-1 rounded-md border border-gray-200 bg-white px-2.5 py-2 text-sm font-medium text-gray-700 shadow-sm hover:bg-gray-50" title="Back to chat rooms">
                             <svg class="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                 <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 19l-7-7 7-7"></path>
                             </svg>
@@ -118,6 +118,7 @@
                         </div>
                     </div>
                 </div>
+                <div id="chatHeaderSpacer" class="hidden h-20 lg:hidden"></div>
 
                 <!-- Messages Area -->
                 <div id="pinnedMessagesPanel" class="hidden border-b border-yellow-200 bg-yellow-50 px-4 py-3"></div>
@@ -515,7 +516,7 @@ document.addEventListener('DOMContentLoaded', function() {
 
     // Auto-select first room if available
     const firstRoom = document.querySelector('.chat-room-item');
-    if (firstRoom) {
+    if (firstRoom && window.innerWidth >= 1024) {
         const roomId = firstRoom.dataset.roomId;
         selectChatRoom(roomId);
     }
@@ -538,9 +539,10 @@ function selectChatRoom(roomId) {
     // Show chat interface
     document.getElementById('welcomeMessage').classList.add('hidden');
     document.getElementById('chatHeader').classList.remove('hidden');
+    document.getElementById('chatHeaderSpacer').classList.remove('hidden');
     document.getElementById('messagesContainer').classList.remove('hidden');
     document.getElementById('messageInput').classList.remove('hidden');
-    document.getElementById('chatPanel').scrollIntoView({ behavior: 'smooth', block: 'start' });
+    showChatPanelView();
     clearReply();
     renderPinnedMessages([]);
     
@@ -564,9 +566,31 @@ function selectChatRoom(roomId) {
     window.typingPollingInterval = setInterval(getTypingUsers, 2000); // Check every 2 seconds
 }
 
-function scrollToChatRooms() {
+function showChatPanelView() {
     const sidebar = document.getElementById('chatSidebar');
-    if (!sidebar) return;
+    const panel = document.getElementById('chatPanel');
+
+    panel.classList.remove('hidden');
+    panel.classList.add('flex');
+    document.getElementById('chatHeaderSpacer').classList.remove('hidden');
+
+    if (window.innerWidth < 1024) {
+        sidebar.classList.add('hidden');
+        panel.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    }
+}
+
+function showChatRoomsView() {
+    const sidebar = document.getElementById('chatSidebar');
+    const panel = document.getElementById('chatPanel');
+    if (!sidebar || !panel) return;
+
+    if (window.innerWidth < 1024) {
+        panel.classList.add('hidden');
+        panel.classList.remove('flex');
+        sidebar.classList.remove('hidden');
+        document.getElementById('chatHeaderSpacer').classList.add('hidden');
+    }
 
     sidebar.scrollIntoView({ behavior: 'smooth', block: 'start' });
     sidebar.classList.add('ring-2', 'ring-blue-200');
@@ -630,6 +654,9 @@ function displayMessages(messages) {
         const isOwnMessage = message.user.id === currentUserId;
         const messageClass = isOwnMessage ? 'ml-auto bg-blue-600 text-white' : 'mr-auto bg-gray-100 text-gray-900';
         const avatarHtml = renderMessageAvatar(message.user);
+        const imageFallbackUrl = message.public_file_url && message.public_file_url !== message.file_url
+            ? escapeHtml(message.public_file_url)
+            : '';
         
         return `
             <div class="flex ${isOwnMessage ? 'justify-end' : 'justify-start'} gap-2 group" data-message-id="${message.id}">
@@ -650,7 +677,7 @@ function displayMessages(messages) {
                         <div class="mt-2">
                             ${message.is_image ? 
                                 `<a href="${message.file_url}" target="_blank" rel="noopener" class="block">
-                                    <img src="${message.file_url}" alt="${escapeHtml(message.file_name || 'Shared image')}" class="max-h-80 w-auto max-w-full rounded-md object-contain border ${isOwnMessage ? 'border-blue-400' : 'border-gray-200'}" loading="lazy">
+                                    <img src="${message.file_url}" data-fallback-src="${imageFallbackUrl}" alt="${escapeHtml(message.file_name || 'Shared image')}" class="max-h-80 w-auto max-w-full rounded-md object-contain border ${isOwnMessage ? 'border-blue-400' : 'border-gray-200'}" loading="lazy" onerror="handleChatImageError(this)">
                                 </a>
                                 <a href="${message.file_url}" target="_blank" rel="noopener" class="mt-1 inline-block text-xs underline ${isOwnMessage ? 'text-blue-100' : 'text-gray-500'}">${escapeHtml(message.file_name || 'Open image')}</a>` :
                                 `<a href="${message.file_url}" target="_blank" rel="noopener" class="inline-flex items-center break-all text-xs underline">
@@ -868,6 +895,21 @@ function renderMessageAvatar(user) {
             ${initials}
         </div>
     `;
+}
+
+function handleChatImageError(image) {
+    const fallbackSrc = image.dataset.fallbackSrc;
+
+    if (fallbackSrc && image.src !== fallbackSrc) {
+        image.src = fallbackSrc;
+        image.dataset.fallbackSrc = '';
+        return;
+    }
+
+    image.replaceWith(Object.assign(document.createElement('div'), {
+        className: 'rounded-md border border-red-200 bg-red-50 px-3 py-2 text-xs text-red-700',
+        textContent: 'Image could not be loaded.'
+    }));
 }
 
 // Delete message functions

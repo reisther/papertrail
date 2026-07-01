@@ -77,6 +77,19 @@ class ChatMessage extends Model
         return route('chat.files.show', $this);
     }
 
+    public function getPublicFileUrl(): ?string
+    {
+        if (!$this->hasFile()) {
+            return null;
+        }
+
+        $encodedPath = collect(explode('/', $this->file_path))
+            ->map(fn ($segment) => rawurlencode($segment))
+            ->implode('/');
+
+        return asset('storage/' . $encodedPath);
+    }
+
     /**
      * Check if the message is a system message
      */

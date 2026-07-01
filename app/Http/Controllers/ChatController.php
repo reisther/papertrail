@@ -269,6 +269,7 @@ class ChatController extends BaseController
                                                 : null,
                                         ],
                                         'file_url' => $message->getFileUrl(),
+                                        'public_file_url' => $message->getPublicFileUrl(),
                                         'file_name' => $message->file_name,
                                         'file_size' => $message->getFormattedFileSize(),
                                         'is_image' => $message->isImage(),
@@ -315,11 +316,10 @@ class ChatController extends BaseController
             abort(404);
         }
 
-        return Storage::disk('public')->response(
-            $message->file_path,
-            $message->file_name,
-            ['Content-Type' => $message->file_type ?: 'application/octet-stream']
-        );
+        return response()->file(Storage::disk('public')->path($message->file_path), [
+            'Content-Type' => $message->file_type ?: 'application/octet-stream',
+            'Content-Disposition' => 'inline; filename="' . addslashes($message->file_name ?: 'attachment') . '"',
+        ]);
     }
 
     /**
@@ -418,6 +418,7 @@ class ChatController extends BaseController
                             : null,
                     ],
                     'file_url' => $message->getFileUrl(),
+                    'public_file_url' => $message->getPublicFileUrl(),
                     'file_name' => $message->file_name,
                     'file_size' => $message->getFormattedFileSize(),
                     'is_image' => $message->isImage(),
