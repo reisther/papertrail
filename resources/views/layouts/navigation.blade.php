@@ -97,35 +97,35 @@
                 </nav>
 
                 <!-- User Menu -->
-                <div class="flex items-center space-x-4">
+                <div class="flex min-w-0 items-center space-x-4">
                     <!-- User Dropdown -->
-                    <div class="relative" x-data="{ open: false }">
-                        <button @click="open = !open" class="flex items-center space-x-2 text-gray-700 hover:text-blue-600 focus:outline-none">
+                    <div class="relative min-w-0" x-data="{ open: false }">
+                        <button @click="open = !open" class="flex min-w-0 max-w-44 items-center gap-2 text-gray-700 hover:text-blue-600 focus:outline-none">
                             @auth
                                 @if(Auth::user()->profile_picture_path)
                                     <img src="{{ route('profile.picture', Auth::user()) }}?v={{ Auth::user()->updated_at?->timestamp }}"
                                          alt="{{ Auth::user()->name }}"
-                                         class="w-8 h-8 rounded-full object-cover border border-gray-200">
+                                         class="h-8 w-8 shrink-0 rounded-full border border-gray-200 object-cover">
                                 @else
-                                    <div class="w-8 h-8 bg-blue-100 text-blue-700 rounded-full flex items-center justify-center text-sm font-semibold">
+                                    <div class="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-blue-100 text-sm font-semibold text-blue-700">
                                         {{ strtoupper(substr(Auth::user()->firstname, 0, 1) . substr(Auth::user()->lastname, 0, 1)) }}
                                     </div>
                                 @endif
                             @else
-                                <div class="w-8 h-8 bg-gray-300 rounded-full flex items-center justify-center">
+                                <div class="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-gray-300">
                                     <svg class="w-5 h-5 text-gray-600" fill="currentColor" viewBox="0 0 20 20">
                                         <path fill-rule="evenodd" d="M10 9a3 3 0 100-6 3 3 0 000 6zm-7 9a7 7 0 1114 0H3z" clip-rule="evenodd"></path>
                                     </svg>
                                 </div>
                             @endauth
-                            <span class="hidden md:block text-sm font-medium">
+                            <span class="hidden min-w-0 max-w-28 truncate text-left text-sm font-medium md:block">
                                 @auth
                                     {{ Auth::user()->name }}
                                 @else
                                     Guest
                                 @endauth
                             </span>
-                            <svg class="w-4 h-4" fill="currentColor" viewBox="0 0 20 20">
+                            <svg class="h-4 w-4 shrink-0" fill="currentColor" viewBox="0 0 20 20">
                                 <path fill-rule="evenodd" d="M5.293 7.293a1 1 0 011.414 0L10 10.586l3.293-3.293a1 1 0 111.414 1.414l-4 4a1 1 0 01-1.414 0l-4-4a1 1 0 010-1.414z" clip-rule="evenodd"></path>
                             </svg>
                         </button>
