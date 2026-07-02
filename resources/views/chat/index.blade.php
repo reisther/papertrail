@@ -22,7 +22,7 @@
         @php
             $chatRoomGroups = $chatRooms->groupBy(fn ($room) => $room->project?->title ?? 'General Rooms');
             $showFolderSidebar = Auth::user()->isTeacher();
-            $canCreateChatRooms = Auth::user()->canLeadGroup() || Auth::user()->isTeacher() || Auth::user()->isAdmin();
+            $canCreateChatRooms = Auth::user()->canLeadGroup() || Auth::user()->isTeacher();
         @endphp
         <div id="chatLayout" class="grid grid-cols-1 lg:grid-cols-4 gap-4 lg:gap-6 lg:h-[calc(100vh-12rem)]">
             <!-- Chat Rooms Sidebar -->
@@ -269,8 +269,8 @@
 </div>
 
 <!-- Add Participants Modal -->
-<div id="addParticipantsModal" class="fixed inset-0 bg-gray-600 bg-opacity-50 overflow-y-auto h-full w-full hidden z-50">
-    <div class="relative top-20 mx-auto p-5 border w-96 shadow-lg rounded-md bg-white">
+<div id="addParticipantsModal" class="fixed inset-0 bg-gray-600 bg-opacity-50 overflow-y-auto h-full w-full hidden z-[60]">
+    <div class="relative top-20 mx-auto p-5 border w-full max-w-md shadow-lg rounded-md bg-white">
         <div class="mt-3">
             <div class="flex items-center justify-between mb-4">
                 <h3 class="text-lg font-medium text-gray-900">Add Participants</h3>
@@ -306,15 +306,20 @@
 
 <!-- Participants List Modal -->
 <div id="participantsModal" class="fixed inset-0 bg-gray-600 bg-opacity-50 overflow-y-auto h-full w-full hidden z-50">
-    <div class="relative top-20 mx-auto p-5 border w-96 shadow-lg rounded-md bg-white">
+    <div class="relative top-20 mx-auto p-5 border w-full max-w-md shadow-lg rounded-md bg-white">
         <div class="mt-3">
             <div class="flex items-center justify-between mb-4">
                 <h3 class="text-lg font-medium text-gray-900">Participants</h3>
-                <button onclick="closeParticipantsModal()" class="text-gray-400 hover:text-gray-600">
-                    <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path>
-                    </svg>
-                </button>
+                <div class="flex items-center gap-2">
+                    <button id="participantsAddButton" onclick="showAddParticipantsModal()" class="hidden rounded-md bg-blue-600 px-3 py-1.5 text-sm font-medium text-white hover:bg-blue-700">
+                        Add
+                    </button>
+                    <button onclick="closeParticipantsModal()" class="text-gray-400 hover:text-gray-600">
+                        <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path>
+                        </svg>
+                    </button>
+                </div>
             </div>
             <div id="participantsList" class="space-y-2">
                 <!-- Participants will be loaded here -->
@@ -454,6 +459,7 @@ let shouldScrollToBottom = false;
 let selectedReplyMessage = null;
 let currentMessagesById = {};
 let currentPinnedMessages = [];
+let currentChatRoomDetails = null;
 
 // Modal functions
 function showNotification(title, message, type = 'info') {
@@ -613,6 +619,90 @@ function showChatRoomsView() {
     }, 1200);
 }
 
+function stopChatPolling() {
+    if (messagePollingInterval) {
+        clearInterval(messagePollingInterval);
+        messagePollingInterval = null;
+    }
+
+    if (window.typingPollingInterval) {
+        clearInterval(window.typingPollingInterval);
+        window.typingPollingInterval = null;
+    }
+}
+
+function removeChatRoomFromList(roomId) {
+    const roomItem = document.querySelector(`.chat-room-item[data-room-id="${roomId}"]`);
+    if (!roomItem) return;
+
+    const folder = roomItem.closest('details.chat-room-folder');
+    roomItem.remove();
+
+    if (folder) {
+        const remainingRooms = folder.querySelectorAll('.chat-room-item').length;
+        const countBadge = folder.querySelector('summary span:last-child');
+
+        if (countBadge) {
+            countBadge.textContent = remainingRooms;
+        }
+
+        if (remainingRooms === 0) {
+            folder.remove();
+        }
+    }
+
+    const chatRoomsList = document.getElementById('chatRoomsList');
+    if (chatRoomsList && !chatRoomsList.querySelector('.chat-room-item')) {
+        chatRoomsList.innerHTML = `
+            <div class="p-8 text-center text-gray-500">
+                <svg class="w-12 h-12 mx-auto mb-4 text-gray-300" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z"></path>
+                </svg>
+                <p class="text-sm">No chat rooms yet</p>
+                <p class="text-xs mt-1">Chat rooms appear here after your group leader creates one</p>
+            </div>
+        `;
+    }
+}
+
+function clearActiveChatRoom(roomId = currentRoomId) {
+    stopChatPolling();
+    closePinnedMessagesPanel();
+    closeParticipantsModal();
+    closeAddParticipantsModal();
+    clearReply();
+    clearFileSelection();
+    renderPinnedMessages([]);
+
+    currentRoomId = null;
+    currentChatRoomDetails = null;
+    currentMessagesById = {};
+
+    document.querySelectorAll('.chat-room-item').forEach(item => {
+        item.classList.remove('bg-blue-50', 'border-l-4', 'border-blue-500');
+    });
+
+    document.getElementById('chatHeader').classList.add('hidden');
+    document.getElementById('messagesContainer').classList.add('hidden');
+    document.getElementById('messagesContainer').innerHTML = '';
+    document.getElementById('messageInput').classList.add('hidden');
+    document.getElementById('typingIndicator').classList.add('hidden');
+    document.getElementById('welcomeMessage').classList.remove('hidden');
+    document.getElementById('messageText').value = '';
+
+    if (window.innerWidth < 1024) {
+        showChatRoomsView();
+    }
+}
+
+function handleChatAccessLost(roomId, message = 'You are no longer in this chat room.') {
+    if (String(roomId) !== String(currentRoomId)) return;
+
+    removeChatRoomFromList(roomId);
+    clearActiveChatRoom(roomId);
+    showNotification('Chat Closed', message, 'info');
+}
+
 // Load chat room details
 async function loadChatRoom(roomId) {
     try {
@@ -620,17 +710,13 @@ async function loadChatRoom(roomId) {
         const data = await response.json();
         
         if (data.chat_room) {
+            currentChatRoomDetails = data.chat_room;
             document.getElementById('chatRoomName').textContent = data.chat_room.name;
             document.getElementById('chatRoomDescription').textContent = data.chat_room.description || '';
             
-            // Check if current user is creator to show delete button
-            const currentUserId = {{ Auth::id() }};
-            const isCreator = data.chat_room.created_by === currentUserId;
-            const isAdmin = {{ Auth::user()->role === 'Admin' ? 'true' : 'false' }};
-            
             const deleteBtn = document.getElementById('deleteChatRoomBtn');
             if (deleteBtn) {
-                if (isCreator || isAdmin) {
+                if (data.chat_room.can_delete) {
                     deleteBtn.classList.remove('hidden');
                 } else {
                     deleteBtn.classList.add('hidden');
@@ -646,6 +732,11 @@ async function loadChatRoom(roomId) {
 async function loadMessages(roomId) {
     try {
         const response = await fetch(`/chat/rooms/${roomId}/messages`);
+        if (response.status === 403) {
+            handleChatAccessLost(roomId);
+            return;
+        }
+
         const data = await response.json();
         
         if (data.messages) {
@@ -1037,7 +1128,8 @@ document.getElementById('sendMessageForm').addEventListener('submit', async func
     if (selectedReplyMessage) formData.append('reply_to_id', selectedReplyMessage.id);
     
     try {
-        const response = await fetch(`/chat/rooms/${currentRoomId}/messages`, {
+        const sentRoomId = currentRoomId;
+        const response = await fetch(`/chat/rooms/${sentRoomId}/messages`, {
             method: 'POST',
             body: formData,
             headers: {
@@ -1057,6 +1149,11 @@ document.getElementById('sendMessageForm').addEventListener('submit', async func
             shouldScrollToBottom = true; // Force scroll after sending message
             loadMessages(currentRoomId);
         } else {
+            if (response.status === 403) {
+                handleChatAccessLost(sentRoomId, data.error || 'You are no longer in this chat room.');
+                return;
+            }
+
             let errorMessage = data.error || 'Failed to send message';
 
             if (data.errors) {
@@ -1220,8 +1317,8 @@ async function loadAvailableUsers() {
                 <div class="flex items-center space-x-3 p-2 hover:bg-gray-50 rounded">
                     <input type="checkbox" id="user_${user.id}" value="${user.id}" class="rounded border-gray-300">
                     <label for="user_${user.id}" class="flex-1 cursor-pointer">
-                        <div class="font-medium text-gray-900">${user.name}</div>
-                        <div class="text-sm text-gray-500">${user.email} (${user.role})</div>
+                        <div class="font-medium text-gray-900">${escapeHtml(user.name)}</div>
+                        <div class="text-sm text-gray-500">${escapeHtml(user.email)} (${escapeHtml(user.role)})</div>
                     </label>
                 </div>
             `).join('');
@@ -1250,20 +1347,47 @@ async function loadParticipants() {
         const container = document.getElementById('participantsList');
         
         if (data.chat_room && data.chat_room.participants) {
+            currentChatRoomDetails = data.chat_room;
+            const currentUserId = {{ Auth::id() }};
+            const canManageParticipants = Boolean(data.chat_room.can_manage_participants);
+            const addButton = document.getElementById('participantsAddButton');
+            addButton?.classList.toggle('hidden', !canManageParticipants);
+
             container.innerHTML = data.chat_room.participants.map(participant => `
                 <div class="flex items-center justify-between p-2 hover:bg-gray-50 rounded">
-                    <div class="flex items-center space-x-3">
+                    <div class="flex min-w-0 items-center space-x-3">
                         ${renderParticipantAvatar(participant)}
-                        <div>
-                            <div class="font-medium text-gray-900">${escapeHtml(participant.name)}</div>
-                            <div class="text-sm text-gray-500">${escapeHtml(participant.pivot.role)}</div>
+                        <div class="min-w-0">
+                            <div class="flex min-w-0 items-center gap-2">
+                                <span class="truncate font-medium text-gray-900">${escapeHtml(participant.name)}</span>
+                                ${participant.is_admin ? '<span class="rounded-full bg-blue-100 px-2 py-0.5 text-xs font-medium text-blue-800">Admin</span>' : ''}
+                            </div>
+                            <div class="text-sm text-gray-500">${participant.is_admin ? 'Can manage this chat' : escapeHtml(participant.pivot.role)}</div>
                         </div>
                     </div>
-                    ${participant.pivot.role !== 'creator' ? `
-                        <button onclick="removeParticipant(${participant.id})" class="text-red-500 hover:text-red-700 text-sm">
-                            Remove
-                        </button>
-                    ` : ''}
+                    <div class="ml-3 flex shrink-0 items-center gap-2">
+                        ${canManageParticipants && !participant.is_admin ? `
+                            <button onclick="updateParticipantRole(${participant.id}, 'admin')" class="text-xs font-medium text-blue-600 hover:text-blue-800">
+                                Make admin
+                            </button>
+                            <button onclick="removeParticipant(${participant.id})" class="text-xs font-medium text-red-500 hover:text-red-700">
+                                Remove
+                            </button>
+                        ` : ''}
+                        ${canManageParticipants && participant.is_admin ? `
+                            <button onclick="updateParticipantRole(${participant.id}, 'member')" class="text-xs font-medium text-gray-600 hover:text-gray-800">
+                                Remove admin
+                            </button>
+                        ` : ''}
+                        ${canManageParticipants && participant.is_admin && participant.id !== currentUserId ? `
+                            <button onclick="removeParticipant(${participant.id})" class="text-xs font-medium text-red-500 hover:text-red-700">
+                                Remove
+                            </button>
+                        ` : ''}
+                        ${participant.id === currentUserId && participant.is_admin ? `
+                            <span class="rounded-full bg-blue-100 px-2 py-0.5 text-xs font-medium text-blue-800">You are admin</span>
+                        ` : ''}
+                    </div>
                 </div>
             `).join('');
         }
@@ -1273,14 +1397,95 @@ async function loadParticipants() {
 }
 
 function renderParticipantAvatar(participant) {
-    const initials = escapeHtml(participant.initials || participant.name?.charAt(0)?.toUpperCase() || '?');
     const name = escapeHtml(participant.name || 'Participant');
 
     if (participant.avatar_url) {
-        return `<img src="${escapeHtml(participant.avatar_url)}" alt="${name}" class="h-8 w-8 shrink-0 rounded-full border border-gray-200 object-cover">`;
+        return `<img src="${escapeHtml(participant.avatar_url)}" alt="${name}" class="h-8 w-8 shrink-0 rounded-full border border-gray-200 object-cover" onerror="handleParticipantAvatarError(this)">`;
     }
 
-    return `<div class="flex h-8 w-8 shrink-0 items-center justify-center rounded-full border border-blue-100 bg-blue-50 text-xs font-semibold text-blue-700">${initials}</div>`;
+    return renderParticipantFallbackAvatar(name, participant.initials);
+}
+
+function renderParticipantFallbackAvatar(name = 'Participant', initials = '?') {
+    const safeInitials = escapeHtml(initials || '?');
+
+    return `
+        <div class="flex h-8 w-8 shrink-0 items-center justify-center rounded-full border border-blue-100 bg-blue-50 text-xs font-semibold text-blue-700" title="${name}">
+            ${safeInitials}
+        </div>
+    `;
+}
+
+function handleParticipantAvatarError(image) {
+    const name = escapeHtml(image.alt || 'Participant');
+    image.insertAdjacentHTML('afterend', renderParticipantFallbackAvatar(name, '?'));
+    image.remove();
+}
+
+async function updateParticipantRole(userId, role) {
+    const isMakingAdmin = role === 'admin';
+
+    showConfirmation(
+        isMakingAdmin ? 'Make Admin' : 'Remove Admin',
+        isMakingAdmin
+            ? 'Make this participant a chat admin? Admins can add members and manage participant roles.'
+            : 'Remove admin access from this participant? They will stay in the chat as a member.',
+        () => performUpdateParticipantRole(userId, role),
+        isMakingAdmin ? 'Make Admin' : 'Remove Admin',
+        isMakingAdmin ? 'confirm' : 'danger'
+    );
+}
+
+async function performUpdateParticipantRole(userId, role) {
+    try {
+        const response = await fetch(`/chat/rooms/${currentRoomId}/participant-role`, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'X-CSRF-TOKEN': document.querySelector('meta[name="csrf-token"]').getAttribute('content')
+            },
+            body: JSON.stringify({ user_id: userId, role })
+        });
+
+        const result = await response.json();
+
+        if (result.success) {
+            showNotification('Success', result.message, 'success');
+            loadChatRoom(currentRoomId);
+            loadParticipants();
+        } else {
+            showNotification('Error', result.error || 'Failed to update participant role', 'error');
+        }
+    } catch (error) {
+        console.error('Error updating participant role:', error);
+        showNotification('Network Error', 'Failed to update participant role. Please check your connection.', 'error');
+    }
+}
+
+async function toggleChatRoomPin(roomId, event) {
+    event?.stopPropagation();
+
+    try {
+        const response = await fetch(`/chat/rooms/${roomId}/pin`, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'X-CSRF-TOKEN': document.querySelector('meta[name="csrf-token"]').getAttribute('content')
+            }
+        });
+
+        const result = await response.json();
+
+        if (result.success) {
+            showNotification('Success', result.message, 'success');
+            setTimeout(() => location.reload(), 300);
+        } else {
+            showNotification('Error', result.error || 'Failed to update chat room pin', 'error');
+        }
+    } catch (error) {
+        console.error('Error toggling chat room pin:', error);
+        showNotification('Network Error', 'Failed to update chat room pin. Please check your connection.', 'error');
+    }
 }
 
 // Add participants form submission
@@ -1310,6 +1515,7 @@ document.getElementById('addParticipantsForm').addEventListener('submit', async 
         if (result.success) {
             closeAddParticipantsModal();
             showNotification('Success', result.message, 'success');
+            loadParticipants();
         } else {
             showNotification('Error', result.error || 'Failed to add participants', 'error');
         }
@@ -1494,7 +1700,7 @@ async function leaveChatRoom() {
     
     showConfirmation(
         'Leave Chat Room',
-        'Are you sure you want to leave this chat room? You will no longer receive messages from this room.',
+        'Are you sure you want to leave this chat room? Admins must remove their admin access first and make sure another member is admin.',
         () => performLeaveChatRoom(),
         'Leave Room',
         'danger'
@@ -1502,9 +1708,10 @@ async function leaveChatRoom() {
 }
 
 async function performLeaveChatRoom() {
+    const leftRoomId = currentRoomId;
     
     try {
-        const response = await fetch(`/chat/rooms/${currentRoomId}/leave`, {
+        const response = await fetch(`/chat/rooms/${leftRoomId}/leave`, {
             method: 'POST',
             headers: {
                 'Content-Type': 'application/json',
@@ -1516,7 +1723,8 @@ async function performLeaveChatRoom() {
         
         if (result.success) {
             showNotification('Success', result.message, 'success');
-            setTimeout(() => location.reload(), 1500); // Refresh to update room list
+            removeChatRoomFromList(leftRoomId);
+            clearActiveChatRoom(leftRoomId);
         } else {
             showNotification('Error', result.error || 'Failed to leave chat room', 'error');
         }

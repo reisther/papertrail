@@ -170,9 +170,11 @@ Route::middleware('auth')->group(function () {
         // Enhanced chat features
         Route::post('/rooms/{chatRoom}/participants', [ChatController::class, 'addParticipants'])->name('rooms.add-participants');
         Route::delete('/rooms/{chatRoom}/participants', [ChatController::class, 'removeParticipant'])->name('rooms.remove-participant');
+        Route::post('/rooms/{chatRoom}/participant-role', [ChatController::class, 'updateParticipantRole'])->name('rooms.update-participant-role');
         Route::get('/rooms/{chatRoom}/available-users', [ChatController::class, 'getAvailableUsers'])->name('rooms.available-users');
         Route::delete('/rooms/{chatRoom}/messages/{message}', [ChatController::class, 'deleteMessage'])->name('rooms.delete-message');
         Route::post('/rooms/{chatRoom}/messages/{message}/pin', [ChatController::class, 'togglePin'])->name('rooms.messages.toggle-pin');
+        Route::post('/rooms/{chatRoom}/pin', [ChatController::class, 'toggleRoomPin'])->name('rooms.toggle-pin');
         Route::post('/rooms/{chatRoom}/messages/seen', [ChatController::class, 'markAsSeen'])->name('rooms.mark-seen');
         
         // New features

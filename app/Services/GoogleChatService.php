@@ -61,7 +61,7 @@ class GoogleChatService
 
             // Add creator as admin (avoid duplicate if already in participants)
             $creatorUser = auth()->user();
-            if ($creatorUser && !$chatRoom->hasParticipant($creatorUser)) {
+            if ($creatorUser) {
                 $chatRoom->addParticipant($creatorUser, 'admin');
                 Log::info('Added creator as admin', ['user_id' => $creatorUser->id, 'chat_room_id' => $chatRoom->id]);
             }

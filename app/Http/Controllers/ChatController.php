@@ -12,6 +12,8 @@ use Illuminate\Http\Request;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Routing\Controller as BaseController;
 use Illuminate\Support\Facades\Auth;
+use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Schema;
 use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\Facades\Validator;
 
@@ -37,31 +39,46 @@ class ChatController extends BaseController
     public function index()
     {
         $user = Auth::user();
+        $this->abortIfWebsiteAdmin();
 
         $accessibleProjects = $user->accessibleProjects()
             ->with(['owner', 'adviser', 'members'])
             ->get();
 
         $accessibleProjects->each(fn (Project $project) => $this->ensureProjectChatRoom($project));
-
         ChatRoom::whereIn('project_id', $accessibleProjects->pluck('id'))
-            ->where('type', 'project')
             ->with(['project.owner', 'project.adviser', 'project.members'])
             ->get()
-            ->each(fn (ChatRoom $room) => $this->syncProjectChatParticipants($room));
+            ->each(fn (ChatRoom $chatRoom) => $this->syncProjectChatParticipants($chatRoom));
         
         $accessibleProjectIds = $accessibleProjects->pluck('id');
+        $leaveTrackingEnabled = Schema::hasTable('chat_participant_leaves');
+        $roomPinningEnabled = Schema::hasTable('chat_room_pins');
+        $pinnedRoomIds = $roomPinningEnabled
+            ? DB::table('chat_room_pins')->where('user_id', $user->id)->pluck('chat_room_id')
+            : collect();
 
-        // Include participant rooms, rooms the user created, and rooms attached to projects they can access.
+        // Include participant rooms, rooms the user created, and project rooms unless the user left them.
         $chatRooms = ChatRoom::query()
             ->where('is_active', true)
-            ->where(function ($rooms) use ($user, $accessibleProjectIds) {
+            ->where(function ($rooms) use ($user, $accessibleProjectIds, $leaveTrackingEnabled) {
                 $rooms->where('created_by', $user->id)
                     ->orWhereHas('participants', function ($participants) use ($user) {
                         $participants->where('users.id', $user->id);
                     })
-                    ->when($accessibleProjectIds->isNotEmpty(), function ($rooms) use ($accessibleProjectIds) {
-                        $rooms->orWhereIn('project_id', $accessibleProjectIds);
+                    ->when($accessibleProjectIds->isNotEmpty(), function ($rooms) use ($accessibleProjectIds, $user, $leaveTrackingEnabled) {
+                        $rooms->orWhere(function ($projectRooms) use ($accessibleProjectIds, $user, $leaveTrackingEnabled) {
+                            $projectRooms->whereIn('project_id', $accessibleProjectIds);
+
+                            if ($leaveTrackingEnabled) {
+                                $projectRooms->whereNotExists(function ($leaves) use ($user) {
+                                    $leaves->select(DB::raw(1))
+                                        ->from('chat_participant_leaves')
+                                        ->whereColumn('chat_participant_leaves.chat_room_id', 'chat_rooms.id')
+                                        ->where('chat_participant_leaves.user_id', $user->id);
+                                });
+                            }
+                        });
                     });
             })
             ->with(['project', 'latestMessage.user'])
@@ -69,16 +86,23 @@ class ChatController extends BaseController
             ->get()
             ->unique('id')
             ->values()
-            ->map(function ($room) use ($user) {
-                if ($room->type === 'project' && $room->project) {
-                    $this->syncProjectChatParticipants($room);
-                } elseif (!$room->hasParticipant($user)) {
+            ->map(function ($room) use ($user, $pinnedRoomIds) {
+                if (!$room->hasParticipant($user) && !$this->hasLeftChatRoom($room, $user) && $this->canAccessChatRoom($room, $user)) {
                     $room->addParticipant($user, $room->created_by === $user->id ? 'admin' : 'member');
                 }
 
                 $room->unread_count = $room->getUnreadCountForUser($user);
+                $room->is_pinned = $pinnedRoomIds->contains($room->id);
                 return $room;
-            });
+            })
+            ->sort(function ($firstRoom, $secondRoom) {
+                if ($firstRoom->is_pinned !== $secondRoom->is_pinned) {
+                    return $firstRoom->is_pinned ? -1 : 1;
+                }
+
+                return $secondRoom->updated_at <=> $firstRoom->updated_at;
+            })
+            ->values();
 
         $availableProjects = $accessibleProjects
             ->filter(fn (Project $project) => $this->canCreateProjectChatRoom($project, $user))
@@ -94,8 +118,10 @@ class ChatController extends BaseController
     {
         $user = Auth::user();
 
-        if (!$user->canLeadGroup() && !$user->isTeacher() && !$user->isAdmin()) {
-            return $this->chatRoomCreateError($request, 'Only group leaders, advisers, and admins can create chat rooms', 403);
+        $this->abortIfWebsiteAdmin();
+
+        if (!$user->canLeadGroup() && !$user->isTeacher()) {
+            return $this->chatRoomCreateError($request, 'Only group leaders and advisers can create chat rooms', 403);
         }
 
         if (!$request->filled('project_id')) {
@@ -173,7 +199,7 @@ class ChatController extends BaseController
                 return $this->chatRoomCreateError($request, 'Failed to create chat room. Please check the logs for details.', 500);
             }
 
-            if ($chatRoom->type === 'project') {
+            if ($chatRoom->project_id) {
                 $this->syncProjectChatParticipants($chatRoom->load(['project.owner', 'project.adviser', 'project.members']));
             }
 
@@ -204,13 +230,17 @@ class ChatController extends BaseController
      */
     public function getMessages(ChatRoom $chatRoom): JsonResponse
     {
+        $this->abortIfWebsiteAdmin();
+
         try {
             // Check if user is authenticated
             if (!Auth::check()) {
                 return response()->json(['error' => 'User not authenticated'], 401);
             }
 
-            if (!$chatRoom->hasParticipant(Auth::user()) && $this->canAccessChatRoom($chatRoom, Auth::user())) {
+            $this->syncChatRoomProjectParticipants($chatRoom);
+
+            if (!$chatRoom->hasParticipant(Auth::user()) && !$this->hasLeftChatRoom($chatRoom, Auth::user()) && $this->canAccessChatRoom($chatRoom, Auth::user())) {
                 $chatRoom->addParticipant(Auth::user(), $chatRoom->created_by === Auth::id() ? 'admin' : 'member');
             }
 
@@ -305,10 +335,16 @@ class ChatController extends BaseController
 
     public function showFile(ChatMessage $message)
     {
+        $this->abortIfWebsiteAdmin();
+
         $user = Auth::user();
         $chatRoom = $message->chatRoom;
 
-        if (!$user || !$chatRoom || (!$chatRoom->hasParticipant($user) && !$this->canAccessChatRoom($chatRoom, $user))) {
+        if ($chatRoom) {
+            $this->syncChatRoomProjectParticipants($chatRoom);
+        }
+
+        if (!$user || !$chatRoom || (!$chatRoom->hasParticipant($user) && ($this->hasLeftChatRoom($chatRoom, $user) || !$this->canAccessChatRoom($chatRoom, $user)))) {
             abort(403);
         }
 
@@ -327,9 +363,13 @@ class ChatController extends BaseController
      */
     public function sendMessage(Request $request, ChatRoom $chatRoom): JsonResponse
     {
+        $this->abortIfWebsiteAdmin();
+
         $user = Auth::user();
 
-        if (!$chatRoom->hasParticipant($user) && $this->canAccessChatRoom($chatRoom, $user)) {
+        $this->syncChatRoomProjectParticipants($chatRoom);
+
+        if (!$chatRoom->hasParticipant($user) && !$this->hasLeftChatRoom($chatRoom, $user) && $this->canAccessChatRoom($chatRoom, $user)) {
             $chatRoom->addParticipant($user, $chatRoom->created_by === $user->id ? 'admin' : 'member');
         }
 
@@ -444,7 +484,11 @@ class ChatController extends BaseController
      */
     public function show(ChatRoom $chatRoom): JsonResponse
     {
-        if (!$chatRoom->hasParticipant(Auth::user()) && $this->canAccessChatRoom($chatRoom, Auth::user())) {
+        $this->abortIfWebsiteAdmin();
+
+        $this->syncChatRoomProjectParticipants($chatRoom);
+
+        if (!$chatRoom->hasParticipant(Auth::user()) && !$this->hasLeftChatRoom($chatRoom, Auth::user()) && $this->canAccessChatRoom($chatRoom, Auth::user())) {
             $chatRoom->addParticipant(Auth::user(), $chatRoom->created_by === Auth::id() ? 'admin' : 'member');
         }
 
@@ -454,6 +498,13 @@ class ChatController extends BaseController
         }
 
         $chatRoom->load(['participants:id,firstname,lastname,profile_picture_path,updated_at', 'project:id,title']);
+        $currentUser = Auth::user();
+        $canManageParticipants = $this->isChatAdmin($chatRoom, $currentUser);
+        $isRoomPinned = Schema::hasTable('chat_room_pins')
+            && DB::table('chat_room_pins')
+                ->where('chat_room_id', $chatRoom->id)
+                ->where('user_id', $currentUser->id)
+                ->exists();
 
         return response()->json([
             'chat_room' => [
@@ -462,9 +513,15 @@ class ChatController extends BaseController
                 'description' => $chatRoom->description,
                 'type' => $chatRoom->type,
                 'created_by' => $chatRoom->created_by,
+                'is_owner' => $canManageParticipants,
+                'is_admin' => $canManageParticipants,
+                'can_manage_participants' => $canManageParticipants,
+                'can_delete' => $canManageParticipants,
+                'is_pinned' => $isRoomPinned,
                 'project' => $chatRoom->project,
-                'participants' => $chatRoom->participants->map(function ($user) {
+                'participants' => $chatRoom->participants->map(function ($user) use ($chatRoom) {
                     $initials = strtoupper(substr($user->firstname ?? '', 0, 1) . substr($user->lastname ?? '', 0, 1));
+                    $isParticipantAdmin = ($user->pivot->role ?? 'member') === 'admin';
 
                     return [
                         'id' => $user->id,
@@ -473,8 +530,10 @@ class ChatController extends BaseController
                         'avatar_url' => $user->profile_picture_path
                             ? route('profile.picture', $user) . '?v=' . optional($user->updated_at)->timestamp
                             : null,
+                        'is_owner' => $isParticipantAdmin,
+                        'is_admin' => $isParticipantAdmin,
                         'pivot' => [
-                            'role' => $user->pivot->role ?? 'member'
+                            'role' => $isParticipantAdmin ? 'admin' : ($user->pivot->role ?? 'member')
                         ]
                     ];
                 }),
@@ -488,6 +547,8 @@ class ChatController extends BaseController
      */
     public function createProjectChat(Project $project): JsonResponse
     {
+        $this->abortIfWebsiteAdmin();
+
         try {
             // Check if user can manage the project
             if (!$project->canEdit(Auth::user())) {
@@ -528,6 +589,16 @@ class ChatController extends BaseController
         return $chatRoom;
     }
 
+    private function syncChatRoomProjectParticipants(ChatRoom $chatRoom): void
+    {
+        if (!$chatRoom->project_id) {
+            return;
+        }
+
+        $chatRoom->loadMissing(['project.owner', 'project.adviser', 'project.members']);
+        $this->syncProjectChatParticipants($chatRoom);
+    }
+
     private function syncProjectChatParticipants(ChatRoom $chatRoom): void
     {
         $project = $chatRoom->project ?: $chatRoom->project()->with(['owner', 'adviser', 'members'])->first();
@@ -541,16 +612,32 @@ class ChatController extends BaseController
         $allowedIds = $participants->pluck('id')->all();
 
         foreach ($participants as $participant) {
-            $role = $participant->id === $project->owner_id
+            if ($this->hasLeftChatRoom($chatRoom, $participant)) {
+                continue;
+            }
+
+            if ($chatRoom->hasParticipant($participant)) {
+                continue;
+            }
+
+            $role = $participant->id === $project->owner_id || $participant->id === $chatRoom->created_by
                 ? 'admin'
                 : ($participant->isTeacher() ? 'moderator' : 'member');
 
             $chatRoom->addParticipant($participant, $role);
         }
 
-        $chatRoom->participants()
-            ->whereNotIn('users.id', $allowedIds)
-            ->detach();
+        if ($chatRoom->creator) {
+            if (!$this->hasLeftChatRoom($chatRoom, $chatRoom->creator) && !$chatRoom->hasParticipant($chatRoom->creator)) {
+                $chatRoom->addParticipant($chatRoom->creator, 'admin');
+            }
+        }
+
+        if ($chatRoom->wasRecentlyCreated) {
+            $chatRoom->participants()
+                ->whereNotIn('users.id', $allowedIds)
+                ->detach();
+        }
     }
 
     private function getProjectChatParticipants(Project $project)
@@ -573,9 +660,74 @@ class ChatController extends BaseController
             ->values();
     }
 
+    private function hasLeftChatRoom(ChatRoom $chatRoom, User $user): bool
+    {
+        if (!Schema::hasTable('chat_participant_leaves')) {
+            return false;
+        }
+
+        return DB::table('chat_participant_leaves')
+            ->where('chat_room_id', $chatRoom->id)
+            ->where('user_id', $user->id)
+            ->exists();
+    }
+
+    private function clearLeftChatRoom(ChatRoom $chatRoom, User $user): void
+    {
+        if (!Schema::hasTable('chat_participant_leaves')) {
+            return;
+        }
+
+        DB::table('chat_participant_leaves')
+            ->where('chat_room_id', $chatRoom->id)
+            ->where('user_id', $user->id)
+            ->delete();
+    }
+
+    private function recordLeftChatRoom(ChatRoom $chatRoom, User $user): void
+    {
+        if (!Schema::hasTable('chat_participant_leaves')) {
+            return;
+        }
+
+        DB::table('chat_participant_leaves')->updateOrInsert(
+            [
+                'chat_room_id' => $chatRoom->id,
+                'user_id' => $user->id,
+            ],
+            [
+                'left_at' => now(),
+                'created_at' => now(),
+                'updated_at' => now(),
+            ]
+        );
+    }
+
+    private function isChatAdmin(ChatRoom $chatRoom, User $user): bool
+    {
+        if ($user->isAdmin()) {
+            return false;
+        }
+
+        $participant = $chatRoom->participants()->where('users.id', $user->id)->first();
+
+        return $participant && $participant->pivot->role === 'admin';
+    }
+
+    private function chatAdminCount(ChatRoom $chatRoom): int
+    {
+        return $chatRoom->participants()
+            ->wherePivot('role', 'admin')
+            ->count();
+    }
+
     private function canCreateProjectChatRoom(Project $project, User $user): bool
     {
-        if ($user->isAdmin() || $project->canEdit($user)) {
+        if ($user->isAdmin()) {
+            return false;
+        }
+
+        if ($project->canEdit($user)) {
             return true;
         }
 
@@ -615,7 +767,11 @@ class ChatController extends BaseController
 
     private function canAccessChatRoom(ChatRoom $chatRoom, User $user): bool
     {
-        if ($user->isAdmin() || $chatRoom->created_by === $user->id) {
+        if ($user->isAdmin()) {
+            return false;
+        }
+
+        if ($chatRoom->created_by === $user->id) {
             return true;
         }
 
@@ -628,22 +784,25 @@ class ChatController extends BaseController
         return false;
     }
 
+    private function abortIfWebsiteAdmin(): void
+    {
+        if (Auth::user()?->isAdmin()) {
+            abort(403, 'Website administrators cannot access chat rooms.');
+        }
+    }
+
     /**
      * Add participants to a chat room
      */
     public function addParticipants(Request $request, ChatRoom $chatRoom): JsonResponse
     {
-        try {
-            return response()->json([
-                'error' => 'Members can only be added through project invitation links.'
-            ], 403);
+        $this->abortIfWebsiteAdmin();
 
-            // Check if user is admin or creator
+        try {
             $currentUser = Auth::user();
-            $userParticipant = $chatRoom->participants()->where('user_id', $currentUser->id)->first();
-            
-            if (!$userParticipant || !in_array($userParticipant->pivot->role, ['admin', 'creator'])) {
-                return response()->json(['error' => 'Only admins can add participants'], 403);
+
+            if (!$this->isChatAdmin($chatRoom, $currentUser)) {
+                return response()->json(['error' => 'Only chat admins can add participants'], 403);
             }
 
             $validator = Validator::make($request->all(), [
@@ -658,6 +817,10 @@ class ChatController extends BaseController
             $addedUsers = [];
             foreach ($request->user_ids as $userId) {
                 $user = User::find($userId);
+                if ($user) {
+                    $this->clearLeftChatRoom($chatRoom, $user);
+                }
+
                 if ($user && !$chatRoom->hasParticipant($user)) {
                     $chatRoom->addParticipant($user, 'member');
                     $addedUsers[] = [
@@ -687,13 +850,13 @@ class ChatController extends BaseController
      */
     public function removeParticipant(Request $request, ChatRoom $chatRoom): JsonResponse
     {
+        $this->abortIfWebsiteAdmin();
+
         try {
-            // Check if user is admin or creator
             $currentUser = Auth::user();
-            $userParticipant = $chatRoom->participants()->where('user_id', $currentUser->id)->first();
-            
-            if (!$userParticipant || !in_array($userParticipant->pivot->role, ['admin', 'creator'])) {
-                return response()->json(['error' => 'Only admins can remove participants'], 403);
+
+            if (!$this->isChatAdmin($chatRoom, $currentUser)) {
+                return response()->json(['error' => 'Only chat admins can remove participants'], 403);
             }
 
             $validator = Validator::make($request->all(), [
@@ -706,13 +869,21 @@ class ChatController extends BaseController
 
             $userToRemove = User::find($request->user_id);
             
-            // Prevent removing the creator
-            if ($chatRoom->created_by === $userToRemove->id) {
-                return response()->json(['error' => 'Cannot remove the chat room creator'], 400);
-            }
-
             if ($chatRoom->hasParticipant($userToRemove)) {
+                if ($this->isChatAdmin($chatRoom, $userToRemove) && $this->chatAdminCount($chatRoom) <= 1) {
+                    return response()->json([
+                        'error' => 'Assign another chat admin before removing this admin.'
+                    ], 422);
+                }
+
                 $chatRoom->participants()->detach($userToRemove->id);
+                $this->recordLeftChatRoom($chatRoom, $userToRemove);
+                ChatMessage::create([
+                    'chat_room_id' => $chatRoom->id,
+                    'user_id' => $currentUser->id,
+                    'message' => $userToRemove->firstname . ' ' . $userToRemove->lastname . ' was removed from the chat',
+                    'message_type' => 'system'
+                ]);
                 
                 return response()->json([
                     'success' => true,
@@ -731,13 +902,72 @@ class ChatController extends BaseController
         }
     }
 
+    public function updateParticipantRole(Request $request, ChatRoom $chatRoom): JsonResponse
+    {
+        $this->abortIfWebsiteAdmin();
+
+        try {
+            $currentUser = Auth::user();
+
+            if (!$this->isChatAdmin($chatRoom, $currentUser)) {
+                return response()->json(['error' => 'Only chat admins can update participant roles'], 403);
+            }
+
+            $validator = Validator::make($request->all(), [
+                'user_id' => 'required|exists:users,id',
+                'role' => 'required|in:member,admin,moderator',
+            ]);
+
+            if ($validator->fails()) {
+                return response()->json(['errors' => $validator->errors()], 422);
+            }
+
+            $participantUser = User::findOrFail($request->user_id);
+
+            if (!$chatRoom->hasParticipant($participantUser)) {
+                return response()->json(['error' => 'Roles can only be updated for current participants'], 422);
+            }
+
+            $newRole = $request->input('role');
+            $currentRole = $participantUser->pivot->role ?? 'member';
+
+            if ($currentRole === 'admin' && $newRole !== 'admin' && $this->chatAdminCount($chatRoom) <= 1) {
+                return response()->json([
+                    'error' => 'Assign another chat admin before removing admin access.'
+                ], 422);
+            }
+
+            $chatRoom->participants()->updateExistingPivot($participantUser->id, ['role' => $newRole]);
+
+            ChatMessage::create([
+                'chat_room_id' => $chatRoom->id,
+                'user_id' => $currentUser->id,
+                'message' => $participantUser->firstname . ' ' . $participantUser->lastname . ' is now a chat ' . $newRole,
+                'message_type' => 'system'
+            ]);
+
+            return response()->json([
+                'success' => true,
+                'message' => 'Participant role updated successfully',
+            ]);
+        } catch (\Exception $e) {
+            \Log::error('Error updating chat participant role', [
+                'chat_room_id' => $chatRoom->id,
+                'error' => $e->getMessage()
+            ]);
+
+            return response()->json(['error' => 'Failed to update participant role: ' . $e->getMessage()], 500);
+        }
+    }
+
     /**
      * Delete a message
      */
     public function deleteMessage(Request $request, ChatRoom $chatRoom, ChatMessage $message): JsonResponse
     {
+        $this->abortIfWebsiteAdmin();
+
         try {
-            // Check if user is participant
             if (!$chatRoom->hasParticipant(Auth::user())) {
                 return response()->json(['error' => 'Access denied'], 403);
             }
@@ -799,6 +1029,8 @@ class ChatController extends BaseController
      */
     public function markAsSeen(Request $request, ChatRoom $chatRoom): JsonResponse
     {
+        $this->abortIfWebsiteAdmin();
+
         try {
             // Check if user is participant
             if (!$chatRoom->hasParticipant(Auth::user())) {
@@ -844,6 +1076,8 @@ class ChatController extends BaseController
 
     public function togglePin(ChatRoom $chatRoom, ChatMessage $message): JsonResponse
     {
+        $this->abortIfWebsiteAdmin();
+
         try {
             $currentUser = Auth::user();
 
@@ -872,15 +1106,77 @@ class ChatController extends BaseController
         }
     }
 
+    public function toggleRoomPin(ChatRoom $chatRoom): JsonResponse
+    {
+        $this->abortIfWebsiteAdmin();
+
+        try {
+            $currentUser = Auth::user();
+
+            if (!$chatRoom->hasParticipant($currentUser) && !$this->canAccessChatRoom($chatRoom, $currentUser)) {
+                return response()->json(['error' => 'Access denied'], 403);
+            }
+
+            if (!Schema::hasTable('chat_room_pins')) {
+                return response()->json(['error' => 'Chat room pinning is not ready. Please run migrations.'], 500);
+            }
+
+            $existingPin = DB::table('chat_room_pins')
+                ->where('chat_room_id', $chatRoom->id)
+                ->where('user_id', $currentUser->id)
+                ->exists();
+
+            if ($existingPin) {
+                DB::table('chat_room_pins')
+                    ->where('chat_room_id', $chatRoom->id)
+                    ->where('user_id', $currentUser->id)
+                    ->delete();
+            } else {
+                $pinnedRoomCount = DB::table('chat_room_pins')
+                    ->where('user_id', $currentUser->id)
+                    ->count();
+
+                if ($pinnedRoomCount >= 3) {
+                    return response()->json([
+                        'error' => 'You can only pin up to 3 chat rooms. Unpin one room before pinning another.'
+                    ], 422);
+                }
+
+                DB::table('chat_room_pins')->insert([
+                    'chat_room_id' => $chatRoom->id,
+                    'user_id' => $currentUser->id,
+                    'pinned_at' => now(),
+                    'created_at' => now(),
+                    'updated_at' => now(),
+                ]);
+            }
+
+            return response()->json([
+                'success' => true,
+                'is_pinned' => !$existingPin,
+                'message' => $existingPin ? 'Chat room unpinned' : 'Chat room pinned',
+            ]);
+        } catch (\Exception $e) {
+            \Log::error('Error toggling chat room pin', [
+                'chat_room_id' => $chatRoom->id,
+                'user_id' => Auth::id(),
+                'error' => $e->getMessage(),
+            ]);
+
+            return response()->json(['error' => 'Failed to update chat room pin: ' . $e->getMessage()], 500);
+        }
+    }
+
     /**
      * Get available users to add to chat room
      */
     public function getAvailableUsers(ChatRoom $chatRoom): JsonResponse
     {
+        $this->abortIfWebsiteAdmin();
+
         try {
-            // Check if user is participant
-            if (!$chatRoom->hasParticipant(Auth::user())) {
-                return response()->json(['error' => 'Access denied'], 403);
+            if (!$this->isChatAdmin($chatRoom, Auth::user())) {
+                return response()->json(['error' => 'Only chat admins can add participants'], 403);
             }
 
             // Get users who are not already participants
@@ -888,6 +1184,7 @@ class ChatController extends BaseController
             
             $availableUsers = User::whereNotIn('id', $existingParticipantIds)
                                  ->where('status', 'Verified') // Only verified users
+                                 ->where('role', '!=', 'Admin')
                                  ->select('id', 'firstname', 'lastname', 'email', 'role')
                                  ->get()
                                  ->map(function ($user) {
@@ -918,6 +1215,8 @@ class ChatController extends BaseController
      */
     public function leaveChatRoom(ChatRoom $chatRoom): JsonResponse
     {
+        $this->abortIfWebsiteAdmin();
+
         try {
             $currentUser = Auth::user();
             
@@ -926,13 +1225,15 @@ class ChatController extends BaseController
                 return response()->json(['error' => 'You are not a participant in this chat room'], 400);
             }
 
-            // Prevent creator from leaving (they should delete the room instead)
-            if ($chatRoom->created_by === $currentUser->id) {
-                return response()->json(['error' => 'Room creator cannot leave. Delete the room instead.'], 400);
+            if ($this->isChatAdmin($chatRoom, $currentUser)) {
+                return response()->json([
+                    'error' => 'Remove yourself as admin first and make sure another member is assigned as admin before leaving.'
+                ], 422);
             }
 
             // Remove user from participants
             $chatRoom->participants()->detach($currentUser->id);
+            $this->recordLeftChatRoom($chatRoom, $currentUser);
 
             // Add system message about user leaving
             ChatMessage::create([
@@ -962,12 +1263,13 @@ class ChatController extends BaseController
      */
     public function deleteChatRoom(ChatRoom $chatRoom): JsonResponse
     {
+        $this->abortIfWebsiteAdmin();
+
         try {
             $currentUser = Auth::user();
             
-            // Check if user is creator or admin
-            if ($chatRoom->created_by !== $currentUser->id && !$currentUser->isAdmin()) {
-                return response()->json(['error' => 'Only the room creator or admin can delete this chat room'], 403);
+            if (!$this->isChatAdmin($chatRoom, $currentUser)) {
+                return response()->json(['error' => 'Only chat admins can delete this chat room'], 403);
             }
 
             // Store room name for response
@@ -997,6 +1299,8 @@ class ChatController extends BaseController
      */
     public function updateTypingStatus(Request $request, ChatRoom $chatRoom): JsonResponse
     {
+        $this->abortIfWebsiteAdmin();
+
         try {
             // Check if user is participant
             if (!$chatRoom->hasParticipant(Auth::user())) {
@@ -1046,6 +1350,8 @@ class ChatController extends BaseController
      */
     public function getTypingUsers(ChatRoom $chatRoom): JsonResponse
     {
+        $this->abortIfWebsiteAdmin();
+
         try {
             // Check if user is participant
             if (!$chatRoom->hasParticipant(Auth::user())) {
@@ -1094,6 +1400,8 @@ class ChatController extends BaseController
      */
     public function toggleReaction(Request $request, ChatRoom $chatRoom, ChatMessage $message): JsonResponse
     {
+        $this->abortIfWebsiteAdmin();
+
         try {
             // Check if user is participant
             if (!$chatRoom->hasParticipant(Auth::user())) {
@@ -1161,6 +1469,8 @@ class ChatController extends BaseController
      */
     public function getMessageReactions(ChatRoom $chatRoom, ChatMessage $message): JsonResponse
     {
+        $this->abortIfWebsiteAdmin();
+
         try {
             // Check if user is participant
             if (!$chatRoom->hasParticipant(Auth::user())) {
