@@ -453,7 +453,7 @@ class ChatController extends BaseController
             return response()->json(['error' => 'Access denied'], 403);
         }
 
-        $chatRoom->load(['participants:id,firstname,lastname', 'project:id,title']);
+        $chatRoom->load(['participants:id,firstname,lastname,profile_picture_path,updated_at', 'project:id,title']);
 
         return response()->json([
             'chat_room' => [
@@ -464,9 +464,15 @@ class ChatController extends BaseController
                 'created_by' => $chatRoom->created_by,
                 'project' => $chatRoom->project,
                 'participants' => $chatRoom->participants->map(function ($user) {
+                    $initials = strtoupper(substr($user->firstname ?? '', 0, 1) . substr($user->lastname ?? '', 0, 1));
+
                     return [
                         'id' => $user->id,
                         'name' => $user->firstname . ' ' . $user->lastname,
+                        'initials' => $initials ?: '?',
+                        'avatar_url' => $user->profile_picture_path
+                            ? route('profile.picture', $user) . '?v=' . optional($user->updated_at)->timestamp
+                            : null,
                         'pivot' => [
                             'role' => $user->pivot->role ?? 'member'
                         ]

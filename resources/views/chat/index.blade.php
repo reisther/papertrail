@@ -80,8 +80,8 @@
             </div>
 
             <!-- Chat Interface -->
-            <div id="chatPanel" class="hidden lg:col-span-3 bg-white rounded-lg shadow-sm border border-gray-200 overflow-visible lg:overflow-hidden flex-col min-h-[calc(100vh-9rem)] lg:min-h-0 lg:flex">
-                <div id="chatHeader" class="fixed lg:sticky top-16 lg:top-0 left-0 right-0 lg:left-auto lg:right-auto z-40 p-3 sm:p-4 border-b border-gray-200 bg-gray-50 shadow-sm lg:shadow-none hidden">
+            <div id="chatPanel" class="relative hidden lg:col-span-3 bg-white rounded-lg shadow-sm border border-gray-200 overflow-visible lg:overflow-hidden flex-col min-h-[calc(100vh-9rem)] lg:min-h-0 lg:flex">
+                <div id="chatHeader" class="sticky top-16 lg:top-0 z-40 p-3 sm:p-4 border-b border-gray-200 bg-gray-50 shadow-sm lg:shadow-none hidden">
                     <div class="flex items-center justify-between gap-3">
                         <button type="button" onclick="showChatRoomsView()" class="lg:hidden inline-flex shrink-0 items-center gap-1 rounded-md border border-gray-200 bg-white px-2.5 py-2 text-sm font-medium text-gray-700 shadow-sm hover:bg-gray-50" title="Back to chat rooms">
                             <svg class="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -118,14 +118,17 @@
                         </div>
                     </div>
                 </div>
-                <div id="chatHeaderSpacer" class="hidden h-20 lg:hidden"></div>
-
                 <!-- Messages Area -->
-                <div id="pinnedMessagesPanel" class="hidden border-b border-yellow-200 bg-yellow-50 px-4 py-3"></div>
+                <div id="pinnedMessagesPanel" class="fixed left-3 right-3 z-30 hidden max-h-[min(60vh,22rem)] overflow-y-auto rounded-lg border border-yellow-200 bg-yellow-50 px-3 py-3 shadow-xl sm:left-4 sm:right-4 sm:px-4 lg:absolute lg:left-3 lg:right-3"></div>
 
                 <div id="messagesContainer" class="flex-1 overflow-y-auto p-3 sm:p-4 space-y-4 hidden">
                     <!-- Messages will be loaded here -->
                 </div>
+                <button id="scrollToBottomButton" type="button" onclick="scrollMessagesToBottom(true)" class="hidden absolute bottom-24 right-5 z-20 inline-flex h-10 w-10 items-center justify-center rounded-full bg-blue-600 text-white shadow-lg transition hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2" title="Scroll to latest message">
+                    <svg class="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"></path>
+                    </svg>
+                </button>
 
                 <!-- Typing Indicator -->
                 <div id="typingIndicator" class="px-4 py-2 text-sm text-gray-500 italic hidden">
@@ -520,6 +523,18 @@ document.addEventListener('DOMContentLoaded', function() {
         const roomId = firstRoom.dataset.roomId;
         selectChatRoom(roomId);
     }
+
+    const messagesContainer = document.getElementById('messagesContainer');
+    if (messagesContainer) {
+        messagesContainer.addEventListener('scroll', updateScrollToBottomButton);
+    }
+
+    window.addEventListener('resize', function() {
+        const pinnedPanel = document.getElementById('pinnedMessagesPanel');
+        if (pinnedPanel && !pinnedPanel.classList.contains('hidden')) {
+            positionPinnedMessagesPanel();
+        }
+    });
 });
 
 // Select and load a chat room
@@ -539,7 +554,6 @@ function selectChatRoom(roomId) {
     // Show chat interface
     document.getElementById('welcomeMessage').classList.add('hidden');
     document.getElementById('chatHeader').classList.remove('hidden');
-    document.getElementById('chatHeaderSpacer').classList.remove('hidden');
     document.getElementById('messagesContainer').classList.remove('hidden');
     document.getElementById('messageInput').classList.remove('hidden');
     showChatPanelView();
@@ -572,7 +586,6 @@ function showChatPanelView() {
 
     panel.classList.remove('hidden');
     panel.classList.add('flex');
-    document.getElementById('chatHeaderSpacer').classList.remove('hidden');
 
     if (window.innerWidth < 1024) {
         sidebar.classList.add('hidden');
@@ -589,7 +602,7 @@ function showChatRoomsView() {
         panel.classList.add('hidden');
         panel.classList.remove('flex');
         sidebar.classList.remove('hidden');
-        document.getElementById('chatHeaderSpacer').classList.add('hidden');
+        closePinnedMessagesPanel();
     }
 
     sidebar.scrollIntoView({ behavior: 'smooth', block: 'start' });
@@ -649,6 +662,7 @@ function displayMessages(messages) {
     const currentUserId = {{ Auth::id() }};
     currentMessagesById = Object.fromEntries(messages.map(message => [message.id, message]));
     renderPinnedMessages(messages);
+    const wasNearBottom = isMessagesNearBottom();
     
     container.innerHTML = messages.map(message => {
         const isOwnMessage = message.user.id === currentUserId;
@@ -672,15 +686,14 @@ function displayMessages(messages) {
                             <span class="block truncate">${escapeHtml(message.reply_to.message)}</span>
                         </button>
                     ` : ''}
-                    ${message.message && !(message.file_url && message.message === 'File shared') ? `<div class="break-words text-sm whitespace-pre-wrap">${escapeHtml(message.message)}</div>` : ''}
+                    ${message.message && !(message.file_url && message.message === 'File shared') ? `<div class="break-words text-sm whitespace-pre-wrap">${linkifyMessageText(message.message, isOwnMessage)}</div>` : ''}
                     ${message.file_url ? `
                         <div class="mt-2">
                             ${message.is_image ? 
                                 `<a href="${message.file_url}" target="_blank" rel="noopener" class="block">
                                     <img src="${message.file_url}" data-fallback-src="${imageFallbackUrl}" alt="${escapeHtml(message.file_name || 'Shared image')}" class="max-h-80 w-auto max-w-full rounded-md object-contain border ${isOwnMessage ? 'border-blue-400' : 'border-gray-200'}" loading="lazy" onerror="handleChatImageError(this)">
-                                </a>
-                                <a href="${message.file_url}" target="_blank" rel="noopener" class="mt-1 inline-block text-xs underline ${isOwnMessage ? 'text-blue-100' : 'text-gray-500'}">${escapeHtml(message.file_name || 'Open image')}</a>` :
-                                `<a href="${message.file_url}" target="_blank" rel="noopener" class="inline-flex items-center break-all text-xs underline">
+                                </a>` :
+                                `<a href="${message.file_url}" target="_blank" rel="noopener" class="inline-flex items-center break-all text-xs underline decoration-1 underline-offset-2">
                                     <svg class="w-4 h-4 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                         <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15.172 7l-6.586 6.586a2 2 0 102.828 2.828l6.414-6.586a4 4 0 00-5.656-5.656l-6.415 6.585a6 6 0 108.486 8.486L20.5 13"></path>
                                     </svg>
@@ -757,13 +770,47 @@ function displayMessages(messages) {
         markMessagesAsSeen(unseenMessageIds);
     }
     
-    // Smart scroll: auto-scroll on initial load, after sending message, or if user is near the bottom (within 100px)
-    const isNearBottom = container.scrollHeight - container.scrollTop - container.clientHeight < 100;
-    if (isInitialLoad || shouldScrollToBottom || isNearBottom) {
-        container.scrollTop = container.scrollHeight;
+    // Smart scroll: auto-scroll on initial load, after sending message, or if user was near the bottom.
+    if (isInitialLoad || shouldScrollToBottom || wasNearBottom) {
+        scrollMessagesToBottom();
         isInitialLoad = false; // Reset flag after initial scroll
         shouldScrollToBottom = false; // Reset flag after forced scroll
     }
+    updateScrollToBottomButton();
+}
+
+function isMessagesNearBottom() {
+    const container = document.getElementById('messagesContainer');
+    if (!container || container.classList.contains('hidden')) return true;
+
+    return container.scrollHeight - container.scrollTop - container.clientHeight < 120;
+}
+
+function scrollMessagesToBottom(smooth = false) {
+    const container = document.getElementById('messagesContainer');
+    const button = document.getElementById('scrollToBottomButton');
+    if (!container) return;
+
+    button?.classList.add('hidden');
+    container.scrollTo({
+        top: container.scrollHeight,
+        behavior: smooth ? 'smooth' : 'auto'
+    });
+
+    if (smooth) {
+        setTimeout(updateScrollToBottomButton, 350);
+        return;
+    }
+
+    updateScrollToBottomButton();
+}
+
+function updateScrollToBottomButton() {
+    const button = document.getElementById('scrollToBottomButton');
+    const container = document.getElementById('messagesContainer');
+    if (!button || !container || container.classList.contains('hidden')) return;
+
+    button.classList.toggle('hidden', isMessagesNearBottom());
 }
 
 function renderPinnedMessages(messages) {
@@ -784,7 +831,7 @@ function renderPinnedMessages(messages) {
 
     panel.innerHTML = `
         <div class="flex items-start justify-between gap-3">
-            <div>
+            <div class="min-w-0 flex-1">
                 <div class="text-sm font-semibold text-yellow-900">Pinned messages</div>
                 <div class="mt-2 space-y-2">
                     ${currentPinnedMessages.map(message => `
@@ -802,6 +849,10 @@ function renderPinnedMessages(messages) {
             </button>
         </div>
     `;
+
+    if (!panel.classList.contains('hidden')) {
+        positionPinnedMessagesPanel();
+    }
 }
 
 function togglePinnedMessagesPanel() {
@@ -810,11 +861,22 @@ function togglePinnedMessagesPanel() {
         return;
     }
 
+    positionPinnedMessagesPanel();
     document.getElementById('pinnedMessagesPanel').classList.toggle('hidden');
 }
 
 function closePinnedMessagesPanel() {
     document.getElementById('pinnedMessagesPanel').classList.add('hidden');
+}
+
+function positionPinnedMessagesPanel() {
+    const panel = document.getElementById('pinnedMessagesPanel');
+    const header = document.getElementById('chatHeader');
+    if (!panel || !header) return;
+
+    panel.style.top = window.innerWidth < 1024
+        ? `${header.getBoundingClientRect().bottom + 8}px`
+        : `${header.offsetHeight + 8}px`;
 }
 
 function startReply(messageId) {
@@ -878,6 +940,21 @@ function escapeHtml(value) {
         .replace(/>/g, '&gt;')
         .replace(/"/g, '&quot;')
         .replace(/'/g, '&#039;');
+}
+
+function linkifyMessageText(value, isOwnMessage = false) {
+    const escapedText = escapeHtml(value);
+    const linkClass = isOwnMessage
+        ? 'underline decoration-1 underline-offset-2 text-blue-50 hover:text-white'
+        : 'underline decoration-1 underline-offset-2 text-blue-700 hover:text-blue-900';
+
+    return escapedText.replace(/((?:https?:\/\/|www\.)[^\s<]+)/gi, (match) => {
+        const trailingPunctuation = match.match(/[.,!?;:)]+$/)?.[0] || '';
+        const cleanUrl = trailingPunctuation ? match.slice(0, -trailingPunctuation.length) : match;
+        const href = cleanUrl.startsWith('www.') ? `https://${cleanUrl}` : cleanUrl;
+
+        return `<a href="${href}" target="_blank" rel="noopener noreferrer" class="${linkClass}">${cleanUrl}</a>${trailingPunctuation}`;
+    });
 }
 
 function renderMessageAvatar(user) {
@@ -1176,12 +1253,10 @@ async function loadParticipants() {
             container.innerHTML = data.chat_room.participants.map(participant => `
                 <div class="flex items-center justify-between p-2 hover:bg-gray-50 rounded">
                     <div class="flex items-center space-x-3">
-                        <div class="w-8 h-8 bg-blue-500 rounded-full flex items-center justify-center text-white text-sm font-medium">
-                            ${participant.name.charAt(0).toUpperCase()}
-                        </div>
+                        ${renderParticipantAvatar(participant)}
                         <div>
-                            <div class="font-medium text-gray-900">${participant.name}</div>
-                            <div class="text-sm text-gray-500">${participant.pivot.role}</div>
+                            <div class="font-medium text-gray-900">${escapeHtml(participant.name)}</div>
+                            <div class="text-sm text-gray-500">${escapeHtml(participant.pivot.role)}</div>
                         </div>
                     </div>
                     ${participant.pivot.role !== 'creator' ? `
@@ -1195,6 +1270,17 @@ async function loadParticipants() {
     } catch (error) {
         console.error('Error loading participants:', error);
     }
+}
+
+function renderParticipantAvatar(participant) {
+    const initials = escapeHtml(participant.initials || participant.name?.charAt(0)?.toUpperCase() || '?');
+    const name = escapeHtml(participant.name || 'Participant');
+
+    if (participant.avatar_url) {
+        return `<img src="${escapeHtml(participant.avatar_url)}" alt="${name}" class="h-8 w-8 shrink-0 rounded-full border border-gray-200 object-cover">`;
+    }
+
+    return `<div class="flex h-8 w-8 shrink-0 items-center justify-center rounded-full border border-blue-100 bg-blue-50 text-xs font-semibold text-blue-700">${initials}</div>`;
 }
 
 // Add participants form submission
