@@ -32,49 +32,48 @@
                 </div>
 
                 <!-- Navigation Menu -->
-                <nav class="hidden md:flex space-x-8">
+                <nav class="hidden min-w-0 flex-1 items-center justify-center gap-4 xl:flex">
                     @auth
                         @if(Auth::user()->role === 'Admin')
                             <a href="{{ route('admin.dashboard') }}"
-                                class="text-gray-900 hover:text-blue-600 px-3 py-2 text-sm font-medium transition-colors">Dashboard</a>
+                                class="whitespace-nowrap px-2 py-2 text-sm font-medium text-gray-900 transition-colors hover:text-blue-600 xl:px-3">Dashboard</a>
                         @elseif(Auth::user()->role === 'Teacher')
                             <a href="{{ route('teacher.dashboard') }}"
-                                class="text-gray-900 hover:text-blue-600 px-3 py-2 text-sm font-medium transition-colors">Dashboard</a>
+                                class="whitespace-nowrap px-2 py-2 text-sm font-medium text-gray-900 transition-colors hover:text-blue-600 xl:px-3">Dashboard</a>
                         @else
                             <a href="{{ route('dashboard') }}"
-                                class="text-gray-900 hover:text-blue-600 px-3 py-2 text-sm font-medium transition-colors">Dashboard</a>
+                                class="whitespace-nowrap px-2 py-2 text-sm font-medium text-gray-900 transition-colors hover:text-blue-600 xl:px-3">Dashboard</a>
                         @endif
 
                         @if(Auth::user()->isStudentGroupRole() || Auth::user()->isTeacher())
                             <a href="{{ route('projects.index') }}"
-                                class="text-gray-500 hover:text-blue-600 px-3 py-2 text-sm font-medium transition-colors">Projects</a>
+                                class="whitespace-nowrap px-2 py-2 text-sm font-medium text-gray-500 transition-colors hover:text-blue-600 xl:px-3">Projects</a>
                         @endif
 
                         @if(Auth::user()->canLeadGroup())
                             <a href="{{ route('advisers.title-submission') }}"
-                                class="text-gray-500 hover:text-blue-600 px-3 py-2 text-sm font-medium transition-colors">Find Advisers</a>
+                                class="whitespace-nowrap px-2 py-2 text-sm font-medium text-gray-500 transition-colors hover:text-blue-600 xl:px-3">Find Advisers</a>
                         @elseif(Auth::user()->isTeacher())
                             <a href="{{ route('advisers.pending-requests') }}"
-                                class="text-gray-500 hover:text-blue-600 px-3 py-2 text-sm font-medium transition-colors">Student Requests</a>
+                                class="whitespace-nowrap px-2 py-2 text-sm font-medium text-gray-500 transition-colors hover:text-blue-600 xl:px-3">Student Requests</a>
                         @elseif(Auth::user()->role === 'Admin')
                             <a href="{{ route('admin.pending-users') }}"
-                                class="text-gray-500 hover:text-blue-600 px-3 py-2 text-sm font-medium transition-colors">Verify Users</a>
+                                class="whitespace-nowrap px-2 py-2 text-sm font-medium text-gray-500 transition-colors hover:text-blue-600 xl:px-3">Verify Users</a>
                             <a href="{{ route('admin.all-users') }}"
-                                class="text-gray-500 hover:text-blue-600 px-3 py-2 text-sm font-medium transition-colors">User Management</a>
+                                class="whitespace-nowrap px-2 py-2 text-sm font-medium text-gray-500 transition-colors hover:text-blue-600 xl:px-3">User Management</a>
                         @endif
 
                         @if(Auth::user()->isStudentGroupRole() || Auth::user()->isTeacher())
                             <a href="{{ route('defense-schedule.index') }}"
-                                class="text-gray-500 hover:text-blue-600 px-3 py-2 text-sm font-medium transition-colors">Defense
-                                Schedule</a>
+                                class="whitespace-nowrap px-2 py-2 text-sm font-medium text-gray-500 transition-colors hover:text-blue-600 xl:px-3">Defense Schedule</a>
                         @endif
 
                         @if(Auth::user()->isStudentGroupRole() || Auth::user()->isTeacher())
                             <a href="{{ route('chat.index') }}"
-                                class="relative inline-flex items-center text-gray-500 hover:text-blue-600 px-3 py-2 text-sm font-medium transition-colors">
+                                class="relative inline-flex items-center whitespace-nowrap px-2 py-2 text-sm font-medium text-gray-500 transition-colors hover:text-blue-600 xl:px-3">
                                 Chat
                                 @if($chatUnreadCount > 0)
-                                    <span class="ml-2 min-w-5 h-5 rounded-full bg-red-600 px-1.5 text-center text-[11px] font-semibold leading-5 text-white">
+                                    <span class="ml-1.5 h-5 min-w-5 rounded-full bg-red-600 px-1.5 text-center text-[11px] font-semibold leading-5 text-white">
                                         {{ $chatUnreadCount > 99 ? '99+' : $chatUnreadCount }}
                                     </span>
                                 @endif
@@ -82,17 +81,17 @@
                         @endif
 
                         <a href="{{ route('notifications.index') }}"
-                            class="relative inline-flex items-center text-gray-500 hover:text-blue-600 px-3 py-2 text-sm font-medium transition-colors">
+                            class="relative inline-flex items-center whitespace-nowrap px-2 py-2 text-sm font-medium text-gray-500 transition-colors hover:text-blue-600 xl:px-3">
                             Notifications
                             @if($notificationUnreadCount > 0)
-                                <span class="ml-2 min-w-5 h-5 rounded-full bg-red-600 px-1.5 text-center text-[11px] font-semibold leading-5 text-white">
+                                <span class="ml-1.5 h-5 min-w-5 rounded-full bg-red-600 px-1.5 text-center text-[11px] font-semibold leading-5 text-white">
                                     {{ $notificationUnreadCount > 99 ? '99+' : $notificationUnreadCount }}
                                 </span>
                             @endif
                         </a>
                     @else
                         <a href="{{ route('dashboard') }}"
-                            class="text-gray-900 hover:text-blue-600 px-3 py-2 text-sm font-medium transition-colors">Dashboard</a>
+                            class="whitespace-nowrap px-2 py-2 text-sm font-medium text-gray-900 transition-colors hover:text-blue-600 xl:px-3">Dashboard</a>
                     @endauth
                 </nav>
 
@@ -150,7 +149,7 @@
                     </div>
 
                     <!-- Mobile menu button -->
-                    <div class="md:hidden">
+                    <div class="xl:hidden">
                         <button type="button" @click="mobileOpen = !mobileOpen"
                             class="text-gray-500 hover:text-gray-600 focus:outline-none focus:text-gray-600">
                             <svg class="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
@@ -162,7 +161,7 @@
                 </div>
             </div>
 
-            <nav x-show="mobileOpen" x-transition class="md:hidden border-t border-gray-100 py-3 space-y-1">
+            <nav x-show="mobileOpen" x-transition class="xl:hidden border-t border-gray-100 py-3 space-y-1">
                 @auth
                     @if(Auth::user()->role === 'Admin')
                         <a href="{{ route('admin.dashboard') }}" class="block px-3 py-2 text-sm font-medium text-gray-900 hover:text-blue-600">Dashboard</a>
