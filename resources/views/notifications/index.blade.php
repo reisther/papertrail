@@ -10,11 +10,48 @@
             <div class="bg-white shadow-sm rounded-lg border border-gray-200 overflow-hidden">
                 <div class="px-5 py-4 border-b border-gray-100">
                     <h3 class="text-lg font-semibold text-gray-900">Recent updates</h3>
-                    <p class="text-sm text-gray-500">Unread chat activity from your rooms appears here.</p>
+                    <p class="text-sm text-gray-500">Student requests and unread chat activity appear here.</p>
                 </div>
 
-                @if($chatNotifications->isNotEmpty())
+                @if($studentRequestNotifications->isNotEmpty() || $chatNotifications->isNotEmpty())
                     <div class="divide-y divide-gray-100">
+                        @foreach($studentRequestNotifications as $requestNotification)
+                            @php
+                                $student = $requestNotification->student;
+                                $studentName = $student?->name ?? 'A student';
+                                $project = $student?->ownedProjects?->first();
+                                $projectTitle = $project?->title ?? 'Student group';
+                            @endphp
+
+                            <a href="{{ route('advisers.pending-requests') }}" class="block px-5 py-4 hover:bg-amber-50 transition">
+                                <div class="flex items-start gap-4">
+                                    <div class="mt-1 flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-amber-100 text-amber-700">
+                                        <svg class="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M18 9v3m0 0v3m0-3h3m-3 0h-3M12 7a4 4 0 11-8 0 4 4 0 018 0zM4 20a6 6 0 0112 0"></path>
+                                        </svg>
+                                    </div>
+
+                                    <div class="min-w-0 flex-1">
+                                        <div class="flex items-start justify-between gap-3">
+                                            <div class="min-w-0">
+                                                <p class="font-semibold text-gray-900 truncate">New adviser request</p>
+                                                <p class="mt-1 text-sm text-gray-600 truncate">
+                                                    {{ $studentName }} from {{ $projectTitle }} requested you as adviser.
+                                                </p>
+                                            </div>
+                                            <span class="shrink-0 rounded-full bg-amber-500 px-2 py-1 text-xs font-semibold text-white">
+                                                Request
+                                            </span>
+                                        </div>
+
+                                        <p class="mt-2 text-xs text-gray-400">
+                                            {{ $requestNotification->created_at?->diffForHumans() ?? 'Pending request' }}
+                                        </p>
+                                    </div>
+                                </div>
+                            </a>
+                        @endforeach
+
                         @foreach($chatNotifications as $notification)
                             @php
                                 $room = $notification['room'];
@@ -63,7 +100,7 @@
                             </svg>
                         </div>
                         <h3 class="text-xl font-semibold text-gray-900">No notifications yet</h3>
-                        <p class="mt-2 text-gray-600">Unread chat activity will appear here.</p>
+                        <p class="mt-2 text-gray-600">Student requests and unread chat activity will appear here.</p>
                     </div>
                 @endif
             </div>

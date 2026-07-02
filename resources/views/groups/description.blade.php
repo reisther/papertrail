@@ -33,15 +33,31 @@
                         <div>
                             <label for="group_name" class="block text-sm font-medium text-gray-700">Group Name</label>
                             <input id="group_name" name="group_name" type="text" required
-                                   value="{{ old('group_name', $group->title ?? '') }}"
+                                   value="{{ old('group_name', $group?->title ?? '') }}"
                                    class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500">
                             @error('group_name') <p class="mt-1 text-sm text-red-600">{{ $message }}</p> @enderror
                         </div>
 
                         <div>
+                            <label for="group_course" class="block text-sm font-medium text-gray-700">Group Course</label>
+                            @php
+                                $selectedCourse = old('group_course', $group?->group_course ?? $group?->owner?->course ?? auth()->user()?->course);
+                            @endphp
+                            <select id="group_course" name="group_course" required
+                                    class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500">
+                                @foreach(['Information Technology', 'Information Systems', 'Computer Science'] as $course)
+                                    <option value="{{ $course }}" @selected($selectedCourse === $course)>
+                                        {{ $course }}
+                                    </option>
+                                @endforeach
+                            </select>
+                            @error('group_course') <p class="mt-1 text-sm text-red-600">{{ $message }}</p> @enderror
+                        </div>
+
+                        <div>
                             <label for="group_description" class="block text-sm font-medium text-gray-700">Group Description</label>
                             <textarea id="group_description" name="group_description" rows="4"
-                                      class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500">{{ old('group_description', $group->description ?? '') }}</textarea>
+                                      class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500">{{ old('group_description', $group?->description ?? '') }}</textarea>
                             @error('group_description') <p class="mt-1 text-sm text-red-600">{{ $message }}</p> @enderror
                         </div>
 
@@ -76,6 +92,11 @@
                             <div>
                                 <p class="text-sm font-medium text-gray-700">Group Name</p>
                                 <p class="mt-1 text-gray-900">{{ $group->title }}</p>
+                            </div>
+
+                            <div>
+                                <p class="text-sm font-medium text-gray-700">Group Course</p>
+                                <p class="mt-1 text-gray-900">{{ $group->group_course ?? $group->owner?->course ?? 'Not set' }}</p>
                             </div>
 
                             <div>

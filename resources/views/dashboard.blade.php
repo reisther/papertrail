@@ -19,6 +19,8 @@
                     <h3 class="text-lg font-semibold mb-4">Welcome, {{ $user->firstname }} {{ $user->lastname }}!</h3>
                     <p class="text-gray-600 mb-6">You are logged in as a {{ $user->canLeadGroup() ? 'Leader' : 'Member' }}.</p>
 
+                    @include('partials.announcements-panel')
+
                     @if(session('success'))
                         <div class="mb-6 bg-green-50 border border-green-200 text-green-800 px-4 py-3 rounded-lg">
                             {{ session('success') }}
@@ -112,7 +114,7 @@
 
                     </div>
                     
-                    <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+                    <div class="grid grid-cols-1 {{ $user->canLeadGroup() ? 'md:grid-cols-3' : 'md:grid-cols-2' }} gap-6">
                         <div class="bg-blue-50 p-6 rounded-lg">
                             <h4 class="font-semibold text-blue-800">My Projects</h4>
                             <p class="text-2xl font-bold text-blue-600">{{ $user->accessibleProjects()->count() }}</p>
@@ -126,6 +128,14 @@
                                 <a href="{{ route('advisers.title-submission') }}" class="text-green-600 hover:text-green-800 text-sm">View all -></a>
                             @endif
                         </div>
+
+                        @if($user->canLeadGroup())
+                            <div class="bg-indigo-50 p-6 rounded-lg">
+                                <h4 class="font-semibold text-indigo-800">Adviser Tasks</h4>
+                                <p class="text-2xl font-bold text-indigo-600">{{ $group ? $group->tasks()->count() : 0 }}</p>
+                                <a href="{{ route('todo.index') }}" class="text-indigo-600 hover:text-indigo-800 text-sm">Open checklist -></a>
+                            </div>
+                        @endif
                     </div>
 
                     <div class="mt-6 p-4 bg-gray-50 rounded-lg">

@@ -9,6 +9,7 @@ use App\Http\Controllers\ProfileController;
 use App\Http\Controllers\ProjectController;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\Route;
+use Illuminate\Http\Request;
 use App\Http\Controllers\TitleSubmissionController;
 use App\Http\Controllers\SuggestedAIController;
 
@@ -103,8 +104,24 @@ Route::middleware('auth')->group(function () {
             ->sortByDesc(fn ($notification) => optional($notification['latest_message'])->created_at)
             ->values();
 
-        return view('notifications.index', compact('chatNotifications'));
+        $studentRequestNotifications = collect();
+        if ($user->isTeacher()) {
+            $studentRequestNotifications = $user->studentRequests()
+                ->pending()
+                ->with(['student.ownedProjects' => fn ($query) => $query->latest()])
+                ->latest()
+                ->get();
+        }
+
+        return view('notifications.index', compact('chatNotifications', 'studentRequestNotifications'));
     })->name('notifications.index');
+    Route::get('/announcements/{announcement}/attachment', function (\App\Models\Announcement $announcement) {
+        if (! $announcement->attachment_path || ! \Illuminate\Support\Facades\Storage::disk('public')->exists($announcement->attachment_path)) {
+            abort(404);
+        }
+
+        return \Illuminate\Support\Facades\Storage::disk('public')->download($announcement->attachment_path, $announcement->attachment_name);
+    })->name('announcements.attachment');
     
     // Adviser routes
     Route::get('/advisers/title-submission', [AdviserController::class, 'TitleSubmission'])->name('advisers.title-submission');
@@ -118,6 +135,228 @@ Route::middleware('auth')->group(function () {
     Route::post('/title-submission',[TitleSubmissionController::class, 'store'])->name('title-submission.store');
     Route::get('/my-advisers', [AdviserController::class, 'myAdvisers'])->name('advisers.my-advisers');
     Route::get('/my-students', [AdviserController::class, 'myStudents'])->name('advisers.my-students');
+    Route::get('/advisers/progress-tracker', function () {
+        if (!Auth::user()->isTeacher()) {
+            abort(403, 'Access denied. Teachers only.');
+        }
+
+        $advisees = \App\Models\Project::query()
+            ->where('adviser_id', Auth::id())
+            ->with(['owner', 'tasks'])
+            ->latest('updated_at')
+            ->get()
+            ->map(function ($project) {
+                $chapters = collect(range(1, 5))->map(function ($chapter) use ($project) {
+                    $tasks = $project->tasks->where('chapter', $chapter);
+                    $totalTasks = $tasks->count();
+                    $completedTasks = $tasks->where('is_completed', true)->count();
+                    $contribution = $totalTasks > 0
+                        ? round(($completedTasks / $totalTasks) * 20, 2)
+                        : 0;
+
+                    return (object) [
+                        'number' => $chapter,
+                        'name' => "Chapter {$chapter}",
+                        'totalTasks' => $totalTasks,
+                        'completedTasks' => $completedTasks,
+                        'contribution' => $contribution,
+                        'status' => "{$completedTasks}/{$totalTasks} tasks completed",
+                    ];
+                });
+
+                return (object) [
+                    'projectId' => $project->id,
+                    'groupName' => $project->title,
+                    'groupCourse' => $project->group_course ?? $project->owner?->course ?? 'Unassigned Course',
+                    'ownerName' => $project->owner?->name ?? 'Student Group',
+                    'progress' => round($chapters->sum('contribution'), 2),
+                    'chapters' => $chapters,
+                ];
+            });
+        $courseGroups = $advisees->groupBy('groupCourse');
+
+        return view('advisers.progress-tracker', compact('advisees', 'courseGroups'));
+    })->name('advisers.progress-tracker');
+    Route::get('/advisers/todo/{chapterName?}', function (Request $request, ?string $chapterName = null) {
+        if (!Auth::user()->isTeacher()) {
+            abort(403, 'Access denied. Teachers only.');
+        }
+
+        $projects = \App\Models\Project::where('adviser_id', Auth::id())->orderBy('title')->get();
+        $selectedProjectId = $request->integer('project_id') ?: $projects->first()?->id;
+        $selectedProject = $projects->firstWhere('id', $selectedProjectId);
+        $todos = \App\Models\ProjectTask::query()
+            ->where('adviser_id', Auth::id())
+            ->when($selectedProject, fn ($query) => $query->where('project_id', $selectedProject->id))
+            ->orderBy('chapter')
+            ->orderBy('created_at')
+            ->get()
+            ->groupBy('chapter');
+        $canManageTasks = true;
+        $canToggleTasks = false;
+        $courses = ['Information Technology', 'Information Systems', 'Computer Science'];
+        $selectedChapter = null;
+
+        return view('teacher.todo-list', compact('todos', 'chapterName', 'projects', 'selectedProject', 'canManageTasks', 'canToggleTasks', 'courses', 'selectedChapter'));
+    })->name('advisers.todo');
+    Route::get('/teacher/todo-list', function (Request $request) {
+        $user = Auth::user();
+
+        if (! $user->isTeacher() && ! $user->canLeadGroup()) {
+            abort(403, 'Access denied.');
+        }
+
+        $projects = $user->isTeacher()
+            ? \App\Models\Project::where('adviser_id', $user->id)->orderBy('title')->get()
+            : $user->ownedProjects()->whereNotNull('adviser_id')->orderBy('title')->get();
+        $selectedProjectId = $request->integer('project_id') ?: $projects->first()?->id;
+        $selectedProject = $projects->firstWhere('id', $selectedProjectId);
+        $todos = \App\Models\ProjectTask::query()
+            ->when($user->isTeacher(), fn ($query) => $query->where('adviser_id', $user->id))
+            ->when($user->canLeadGroup(), fn ($query) => $query->whereHas('project', fn ($project) => $project->where('owner_id', $user->id)))
+            ->when($selectedProject, fn ($query) => $query->where('project_id', $selectedProject->id))
+            ->orderBy('chapter')
+            ->orderBy('created_at')
+            ->get()
+            ->groupBy('chapter');
+        $selectedChapter = null;
+        if ($user->canLeadGroup()) {
+            $requestedChapter = $request->integer('chapter');
+            $selectedChapter = $requestedChapter >= 1 && $requestedChapter <= 5
+                ? $requestedChapter
+                : (int) ($todos->keys()->first() ?? 1);
+            $todos = $todos->filter(fn ($tasks, $chapter) => (int) $chapter === $selectedChapter);
+        }
+        $chapterName = null;
+        $canManageTasks = $user->isTeacher();
+        $canToggleTasks = $user->canLeadGroup();
+        $courses = ['Information Technology', 'Information Systems', 'Computer Science'];
+
+        return view('teacher.todo-list', compact('todos', 'chapterName', 'projects', 'selectedProject', 'canManageTasks', 'canToggleTasks', 'courses', 'selectedChapter'));
+    })->name('todo.index');
+    Route::post('/teacher/todo-list', function (Request $request) {
+        if (!Auth::user()->isTeacher()) {
+            abort(403, 'Access denied. Teachers only.');
+        }
+
+        $validated = $request->validate([
+            'assignment_scope' => 'required|in:project,course',
+            'project_id' => 'required_if:assignment_scope,project|nullable|exists:projects,id',
+            'course' => 'required_if:assignment_scope,course|nullable|in:Information Technology,Information Systems,Computer Science',
+            'chapter' => 'required|integer|min:1|max:5',
+            'tasks' => 'required|array|min:1',
+            'tasks.*' => 'required|string|max:255',
+        ]);
+
+        $projects = \App\Models\Project::where('adviser_id', Auth::id())
+            ->when($validated['assignment_scope'] === 'project', fn ($query) => $query->where('id', $validated['project_id']))
+            ->when($validated['assignment_scope'] === 'course', function ($query) use ($validated) {
+                $query->where(function ($courseQuery) use ($validated) {
+                    $courseQuery->where('group_course', $validated['course'])
+                        ->orWhereHas('owner', fn ($ownerQuery) => $ownerQuery->where('course', $validated['course']));
+                });
+            })
+            ->get();
+
+        if ($projects->isEmpty()) {
+            return back()->with('error', 'No advised groups matched that selection.');
+        }
+
+        foreach ($validated['tasks'] as $taskTitle) {
+            $courseTaskGroupId = $validated['assignment_scope'] === 'course'
+                ? \Illuminate\Support\Str::uuid()->toString()
+                : null;
+
+            foreach ($projects as $project) {
+                \App\Models\ProjectTask::create([
+                    'project_id' => $project->id,
+                    'adviser_id' => Auth::id(),
+                    'assignment_course' => $validated['assignment_scope'] === 'course' ? $validated['course'] : null,
+                    'course_task_group_id' => $courseTaskGroupId,
+                    'chapter' => $validated['chapter'],
+                    'title' => $taskTitle,
+                ]);
+            }
+        }
+
+        return back()->with('success', 'To-do list assigned successfully.');
+    })->name('todo.store');
+    Route::patch('/teacher/tasks/{task}', function (Request $request, \App\Models\ProjectTask $task) {
+        if (!Auth::user()->isTeacher() || $task->adviser_id !== Auth::id()) {
+            abort(403, 'Access denied.');
+        }
+        $task->loadMissing('project.owner');
+
+        $validated = $request->validate([
+            'chapter' => 'required|integer|min:1|max:5',
+            'title' => 'required|string|max:255',
+        ]);
+
+        if ($task->course_task_group_id) {
+            \App\Models\ProjectTask::where('adviser_id', Auth::id())
+                ->where('course_task_group_id', $task->course_task_group_id)
+                ->update($validated);
+        } elseif ($taskCourse = ($task->assignment_course ?? $task->project?->group_course ?? $task->project?->owner?->course)) {
+            \App\Models\ProjectTask::where('adviser_id', Auth::id())
+                ->where('chapter', $task->chapter)
+                ->where('title', $task->title)
+                ->whereHas('project', function ($query) use ($taskCourse) {
+                    $query->where('group_course', $taskCourse)
+                        ->orWhereHas('owner', fn ($ownerQuery) => $ownerQuery->where('course', $taskCourse));
+                })
+                ->update($validated);
+        } else {
+            $task->update($validated);
+        }
+
+        return back()->with('success', 'Task updated successfully.');
+    })->name('todo.update');
+    Route::delete('/teacher/tasks/{task}', function (\App\Models\ProjectTask $task) {
+        if (!Auth::user()->isTeacher() || $task->adviser_id !== Auth::id()) {
+            abort(403, 'Access denied.');
+        }
+        $task->loadMissing('project.owner');
+
+        if ($task->course_task_group_id) {
+            \App\Models\ProjectTask::where('adviser_id', Auth::id())
+                ->where('course_task_group_id', $task->course_task_group_id)
+                ->delete();
+        } elseif ($taskCourse = ($task->assignment_course ?? $task->project?->group_course ?? $task->project?->owner?->course)) {
+            \App\Models\ProjectTask::where('adviser_id', Auth::id())
+                ->where('chapter', $task->chapter)
+                ->where('title', $task->title)
+                ->whereHas('project', function ($query) use ($taskCourse) {
+                    $query->where('group_course', $taskCourse)
+                        ->orWhereHas('owner', fn ($ownerQuery) => $ownerQuery->where('course', $taskCourse));
+                })
+                ->delete();
+        } else {
+            $task->delete();
+        }
+
+        return back()->with('success', 'Task deleted successfully.');
+    })->name('todo.destroy');
+    Route::patch('/teacher/tasks/{task}/toggle', function (Request $request, \App\Models\ProjectTask $task) {
+        $task->load('project');
+
+        if (!Auth::user()->canLeadGroup() || $task->project?->owner_id !== Auth::id()) {
+            abort(403, 'Access denied.');
+        }
+
+        $validated = $request->validate([
+            'is_completed' => 'nullable|boolean',
+            'completion_note' => 'nullable|string|max:255',
+        ]);
+        $isCompleted = $request->boolean('is_completed');
+
+        $task->update([
+            'is_completed' => $isCompleted,
+            'completed_at' => $isCompleted ? now() : null,
+            'completion_note' => $validated['completion_note'] ?? null,
+        ]);
+
+        return back();
+    })->name('todo.toggle');
 
     // Leader group management
     Route::get('/group-description', [GroupController::class, 'show'])->name('group-description.show');
@@ -127,6 +366,80 @@ Route::middleware('auth')->group(function () {
     Route::delete('/group-description/members/{member}', [GroupController::class, 'removeMember'])->name('group-description.members.remove');
     
     // Admin routes
+    Route::get('/admin/announcements', function () {
+        if (!Auth::user() || Auth::user()->role !== 'Admin') {
+            abort(403, 'Access denied. Admins only.');
+        }
+
+        $announcements = \App\Models\Announcement::with('author')
+            ->latest()
+            ->get();
+
+        return view('admin.announcements', compact('announcements'));
+    })->name('admin.announcements');
+    Route::post('/admin/announcements', function (Request $request) {
+        if (!Auth::user() || Auth::user()->role !== 'Admin') {
+            abort(403, 'Access denied. Admins only.');
+        }
+
+        $validated = $request->validate([
+            'message' => 'required|string|max:5000',
+            'attachment' => 'nullable|file|max:10240',
+        ]);
+
+        $attachmentPath = null;
+        $attachmentName = null;
+        if ($request->hasFile('attachment')) {
+            $attachmentPath = $request->file('attachment')->store('announcements', 'public');
+            $attachmentName = $request->file('attachment')->getClientOriginalName();
+        }
+
+        \App\Models\Announcement::create([
+            'user_id' => Auth::id(),
+            'message' => $validated['message'],
+            'attachment_path' => $attachmentPath,
+            'attachment_name' => $attachmentName,
+        ]);
+
+        return back()->with('success', 'Announcement posted successfully.');
+    })->name('admin.announcements.store');
+    Route::patch('/admin/announcements/{announcement}', function (Request $request, \App\Models\Announcement $announcement) {
+        if (!Auth::user() || Auth::user()->role !== 'Admin') {
+            abort(403, 'Access denied. Admins only.');
+        }
+
+        $validated = $request->validate([
+            'message' => 'required|string|max:5000',
+            'attachment' => 'nullable|file|max:10240',
+        ]);
+
+        $data = ['message' => $validated['message']];
+        if ($request->hasFile('attachment')) {
+            if ($announcement->attachment_path) {
+                \Illuminate\Support\Facades\Storage::disk('public')->delete($announcement->attachment_path);
+            }
+
+            $data['attachment_path'] = $request->file('attachment')->store('announcements', 'public');
+            $data['attachment_name'] = $request->file('attachment')->getClientOriginalName();
+        }
+
+        $announcement->update($data);
+
+        return back()->with('success', 'Announcement updated successfully.');
+    })->name('admin.announcements.update');
+    Route::delete('/admin/announcements/{announcement}', function (\App\Models\Announcement $announcement) {
+        if (!Auth::user() || Auth::user()->role !== 'Admin') {
+            abort(403, 'Access denied. Admins only.');
+        }
+
+        if ($announcement->attachment_path) {
+            \Illuminate\Support\Facades\Storage::disk('public')->delete($announcement->attachment_path);
+        }
+
+        $announcement->delete();
+
+        return back()->with('success', 'Announcement deleted successfully.');
+    })->name('admin.announcements.destroy');
     Route::get('/admin/pending-users', [AdminController::class, 'pendingUsers'])->name('admin.pending-users');
     Route::get('/admin/users/{user}', [AdminController::class, 'viewUser'])->name('admin.view-user');
     Route::post('/admin/users/{user}/verify', [AdminController::class, 'verifyUser'])->name('admin.verify-user');

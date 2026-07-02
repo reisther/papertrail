@@ -11,6 +11,8 @@
                 <div class="p-6 text-gray-900">
                     <h3 class="text-lg font-semibold mb-4">Welcome, {{ Auth::user()->firstname }} {{ Auth::user()->lastname }}!</h3>
                     <p class="text-gray-600 mb-6">You are logged in as a Teacher.</p>
+
+                    @include('partials.announcements-panel')
                     
                     <div class="grid grid-cols-1 md:grid-cols-3 gap-6">
                         <div class="bg-blue-50 p-6 rounded-lg">
@@ -30,6 +32,30 @@
                             <p class="text-2xl font-bold text-green-600">{{ Auth::user()->accessibleProjects()->count() - Auth::user()->ownedProjects()->count() }}</p>
                             <a href="{{ route('projects.index') }}" class="text-green-600 hover:text-green-800 text-sm">View Projects →</a>
                         </div>
+                    </div>
+
+                    <div class="mt-8 grid grid-cols-1 md:grid-cols-2 gap-6">
+                        <a href="{{ route('todo.index') }}" class="block border border-blue-200 bg-blue-50 p-6 rounded-2xl shadow-sm hover:bg-blue-100 transition group">
+                            <div class="w-12 h-12 bg-blue-200 rounded-xl flex items-center justify-center mb-4">
+                                <svg class="w-6 h-6 text-blue-700" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+                                    <path stroke-linecap="round" stroke-linejoin="round" d="M9 12l2 2 4-4M7 4h10a2 2 0 012 2v14l-4-2-4 2-4-2-4 2V6a2 2 0 012-2z"></path>
+                                </svg>
+                            </div>
+                            <h3 class="text-xl font-bold text-gray-800 mb-1">To-Do Lists</h3>
+                            <p class="text-sm text-gray-500 mb-4">Create per-chapter tasks for student groups.</p>
+                            <span class="text-xs font-semibold text-blue-700 bg-blue-100 group-hover:bg-blue-200 px-4 py-2 rounded-lg transition">Open to-do lists</span>
+                        </a>
+
+                        <a href="{{ route('advisers.progress-tracker') }}" class="block border border-emerald-200 bg-emerald-50 p-6 rounded-2xl shadow-sm hover:bg-emerald-100 transition group">
+                            <div class="w-12 h-12 bg-emerald-200 rounded-xl flex items-center justify-center mb-4">
+                                <svg class="w-6 h-6 text-emerald-700" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+                                    <path stroke-linecap="round" stroke-linejoin="round" d="M4 19V5m0 14h16M8 16v-4m4 4V8m4 8v-6"></path>
+                                </svg>
+                            </div>
+                            <h3 class="text-xl font-bold text-gray-800 mb-1">Progress Tracker</h3>
+                            <p class="text-sm text-gray-500 mb-4">Monitor advisee chapter progress and task completion.</p>
+                            <span class="text-xs font-semibold text-emerald-700 bg-emerald-100 group-hover:bg-emerald-200 px-4 py-2 rounded-lg transition">View progress</span>
+                        </a>
                     </div>
 
                     <div class="mt-6 p-4 bg-gray-50 rounded-lg">

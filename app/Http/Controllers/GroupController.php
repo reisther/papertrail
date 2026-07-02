@@ -113,6 +113,7 @@ class GroupController extends Controller
 
         $validated = $request->validate([
             'group_name' => 'required|string|max:255',
+            'group_course' => 'required|in:Information Technology,Information Systems,Computer Science',
             'group_description' => 'nullable|string|max:2000',
         ]);
 
@@ -125,6 +126,7 @@ class GroupController extends Controller
             ['owner_id' => $leader->id],
             [
                 'title' => $validated['group_name'],
+                'group_course' => $validated['group_course'],
                 'description' => $validated['group_description'],
                 'adviser_id' => $approvedAdviserId,
                 'status' => 'active',

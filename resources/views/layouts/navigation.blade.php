@@ -1,6 +1,7 @@
 @php
     $chatUnreadCount = 0;
     $notificationUnreadCount = 0;
+    $studentRequestPendingCount = 0;
 
     if (Auth::check()) {
         $chatUnreadCount = Auth::user()->chatRooms()
@@ -8,7 +9,13 @@
             ->get()
             ->sum(fn ($room) => $room->getUnreadCountForUser(Auth::user()));
 
-        $notificationUnreadCount = $chatUnreadCount;
+        if (Auth::user()->isTeacher()) {
+            $studentRequestPendingCount = Auth::user()->studentRequests()
+                ->where('status', 'pending')
+                ->count();
+        }
+
+        $notificationUnreadCount = $chatUnreadCount + $studentRequestPendingCount;
     }
 @endphp
 
@@ -55,7 +62,14 @@
                                 class="whitespace-nowrap px-2 py-2 text-sm font-medium text-gray-500 transition-colors hover:text-blue-600 xl:px-3">Find Advisers</a>
                         @elseif(Auth::user()->isTeacher())
                             <a href="{{ route('advisers.pending-requests') }}"
-                                class="whitespace-nowrap px-2 py-2 text-sm font-medium text-gray-500 transition-colors hover:text-blue-600 xl:px-3">Student Requests</a>
+                                class="relative inline-flex items-center whitespace-nowrap px-2 py-2 text-sm font-medium text-gray-500 transition-colors hover:text-blue-600 xl:px-3">
+                                Student Requests
+                                @if($studentRequestPendingCount > 0)
+                                    <span class="ml-1.5 h-5 min-w-5 rounded-full bg-red-600 px-1.5 text-center text-[11px] font-semibold leading-5 text-white">
+                                        {{ $studentRequestPendingCount > 99 ? '99+' : $studentRequestPendingCount }}
+                                    </span>
+                                @endif
+                            </a>
                         @elseif(Auth::user()->role === 'Admin')
                             <a href="{{ route('admin.pending-users') }}"
                                 class="whitespace-nowrap px-2 py-2 text-sm font-medium text-gray-500 transition-colors hover:text-blue-600 xl:px-3">Verify Users</a>
@@ -89,40 +103,26 @@
                                 </span>
                             @endif
                         </a>
-                    @else
-                        <a href="{{ route('dashboard') }}"
-                            class="whitespace-nowrap px-2 py-2 text-sm font-medium text-gray-900 transition-colors hover:text-blue-600 xl:px-3">Dashboard</a>
                     @endauth
                 </nav>
 
                 <!-- User Menu -->
                 <div class="flex min-w-0 items-center space-x-4">
                     <!-- User Dropdown -->
+                    @auth
                     <div class="relative min-w-0" x-data="{ open: false }">
                         <button @click="open = !open" class="flex min-w-0 max-w-44 items-center gap-2 text-gray-700 hover:text-blue-600 focus:outline-none">
-                            @auth
-                                @if(Auth::user()->profile_picture_path)
-                                    <img src="{{ route('profile.picture', Auth::user()) }}?v={{ Auth::user()->updated_at?->timestamp }}"
-                                         alt="{{ Auth::user()->name }}"
-                                         class="h-8 w-8 shrink-0 rounded-full border border-gray-200 object-cover">
-                                @else
-                                    <div class="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-blue-100 text-sm font-semibold text-blue-700">
-                                        {{ strtoupper(substr(Auth::user()->firstname, 0, 1) . substr(Auth::user()->lastname, 0, 1)) }}
-                                    </div>
-                                @endif
+                            @if(Auth::user()->profile_picture_path)
+                                <img src="{{ route('profile.picture', Auth::user()) }}?v={{ Auth::user()->updated_at?->timestamp }}"
+                                     alt="{{ Auth::user()->name }}"
+                                     class="h-8 w-8 shrink-0 rounded-full border border-gray-200 object-cover">
                             @else
-                                <div class="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-gray-300">
-                                    <svg class="w-5 h-5 text-gray-600" fill="currentColor" viewBox="0 0 20 20">
-                                        <path fill-rule="evenodd" d="M10 9a3 3 0 100-6 3 3 0 000 6zm-7 9a7 7 0 1114 0H3z" clip-rule="evenodd"></path>
-                                    </svg>
+                                <div class="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-blue-100 text-sm font-semibold text-blue-700">
+                                    {{ strtoupper(substr(Auth::user()->firstname, 0, 1) . substr(Auth::user()->lastname, 0, 1)) }}
                                 </div>
-                            @endauth
+                            @endif
                             <span class="hidden min-w-0 max-w-28 truncate text-left text-sm font-medium md:block">
-                                @auth
-                                    {{ Auth::user()->name }}
-                                @else
-                                    Guest
-                                @endauth
+                                {{ Auth::user()->name }}
                             </span>
                             <svg class="h-4 w-4 shrink-0" fill="currentColor" viewBox="0 0 20 20">
                                 <path fill-rule="evenodd" d="M5.293 7.293a1 1 0 011.414 0L10 10.586l3.293-3.293a1 1 0 111.414 1.414l-4 4a1 1 0 01-1.414 0l-4-4a1 1 0 010-1.414z" clip-rule="evenodd"></path>
@@ -131,24 +131,21 @@
 
                         <!-- Dropdown Menu -->
                         <div x-show="open" @click.away="open = false" x-transition class="absolute right-0 mt-2 w-48 bg-white rounded-md shadow-lg py-1 z-50">
-                            @auth
-                                <a href="{{ route('profile.edit') }}" class="block px-4 py-2 text-sm text-gray-700 hover:bg-gray-100">Profile</a>
-                                <a href="#" class="block px-4 py-2 text-sm text-gray-700 hover:bg-gray-100">Settings</a>
-                                <div class="border-t border-gray-100"></div>
-                                <form method="POST" action="{{ route('logout') }}">
-                                    @csrf
-                                    <button type="submit" class="block w-full text-left px-4 py-2 text-sm text-gray-700 hover:bg-gray-100">
-                                        Logout
-                                    </button>
-                                </form>
-                            @else
-                                <a href="{{ route('login') }}" class="block px-4 py-2 text-sm text-gray-700 hover:bg-gray-100">Login</a>
-                                <a href="{{ route('register') }}" class="block px-4 py-2 text-sm text-gray-700 hover:bg-gray-100">Register</a>
-                            @endauth
+                            <a href="{{ route('profile.edit') }}" class="block px-4 py-2 text-sm text-gray-700 hover:bg-gray-100">Profile</a>
+                            <a href="#" class="block px-4 py-2 text-sm text-gray-700 hover:bg-gray-100">Settings</a>
+                            <div class="border-t border-gray-100"></div>
+                            <form method="POST" action="{{ route('logout') }}">
+                                @csrf
+                                <button type="submit" class="block w-full text-left px-4 py-2 text-sm text-gray-700 hover:bg-gray-100">
+                                    Logout
+                                </button>
+                            </form>
                         </div>
                     </div>
+                    @endauth
 
                     <!-- Mobile menu button -->
+                    @auth
                     <div class="xl:hidden">
                         <button type="button" @click="mobileOpen = !mobileOpen"
                             class="text-gray-500 hover:text-gray-600 focus:outline-none focus:text-gray-600">
@@ -158,6 +155,7 @@
                             </svg>
                         </button>
                     </div>
+                    @endauth
                 </div>
             </div>
 
@@ -178,7 +176,14 @@
                     @elseif(Auth::user()->role === 'Teacher')
                         <a href="{{ route('teacher.dashboard') }}" class="block px-3 py-2 text-sm font-medium text-gray-900 hover:text-blue-600">Dashboard</a>
                         <a href="{{ route('projects.index') }}" class="block px-3 py-2 text-sm font-medium text-gray-500 hover:text-blue-600">Projects</a>
-                        <a href="{{ route('advisers.pending-requests') }}" class="block px-3 py-2 text-sm font-medium text-gray-500 hover:text-blue-600">Student Requests</a>
+                        <a href="{{ route('advisers.pending-requests') }}" class="flex items-center justify-between px-3 py-2 text-sm font-medium text-gray-500 hover:text-blue-600">
+                            <span>Student Requests</span>
+                            @if($studentRequestPendingCount > 0)
+                                <span class="min-w-5 h-5 rounded-full bg-red-600 px-1.5 text-center text-[11px] font-semibold leading-5 text-white">
+                                    {{ $studentRequestPendingCount > 99 ? '99+' : $studentRequestPendingCount }}
+                                </span>
+                            @endif
+                        </a>
                         <a href="{{ route('defense-schedule.index') }}" class="block px-3 py-2 text-sm font-medium text-gray-500 hover:text-blue-600">Defense Schedule</a>
                         <a href="{{ route('chat.index') }}" class="flex items-center justify-between px-3 py-2 text-sm font-medium text-gray-500 hover:text-blue-600">
                             <span>Chat</span>
@@ -220,8 +225,6 @@
                             @endif
                         </a>
                     @endif
-                @else
-                    <a href="{{ route('dashboard') }}" class="block px-3 py-2 text-sm font-medium text-gray-900 hover:text-blue-600">Dashboard</a>
                 @endauth
             </nav>
         </div>
