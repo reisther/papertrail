@@ -784,6 +784,27 @@ class ChatController extends BaseController
         return false;
     }
 
+    private function canBeAddedToChatRoom(ChatRoom $chatRoom, User $user): bool
+    {
+        if ($user->isAdmin()) {
+            return false;
+        }
+
+        $project = $chatRoom->project_id
+            ? ($chatRoom->project ?: $chatRoom->project()->with(['owner', 'adviser', 'members'])->first())
+            : null;
+
+        if ($user->canLeadGroup()) {
+            return $project && (int) $project->owner_id === (int) $user->id;
+        }
+
+        if ($project) {
+            return $project->canAccess($user);
+        }
+
+        return !$user->canLeadGroup();
+    }
+
     private function abortIfWebsiteAdmin(): void
     {
         if (Auth::user()?->isAdmin()) {
@@ -817,6 +838,13 @@ class ChatController extends BaseController
             $addedUsers = [];
             foreach ($request->user_ids as $userId) {
                 $user = User::find($userId);
+
+                if (!$user || !$this->canBeAddedToChatRoom($chatRoom, $user)) {
+                    return response()->json([
+                        'error' => 'Only this group leader can be added to this chat room.'
+                    ], 422);
+                }
+
                 if ($user) {
                     $this->clearLeftChatRoom($chatRoom, $user);
                 }
@@ -1187,6 +1215,8 @@ class ChatController extends BaseController
                                  ->where('role', '!=', 'Admin')
                                  ->select('id', 'firstname', 'lastname', 'email', 'role')
                                  ->get()
+                                 ->filter(fn (User $user) => $this->canBeAddedToChatRoom($chatRoom, $user))
+                                 ->values()
                                  ->map(function ($user) {
                                      return [
                                          'id' => $user->id,
