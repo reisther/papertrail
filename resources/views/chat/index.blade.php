@@ -100,9 +100,14 @@
                                 </svg>
                                 <span id="pinnedMessagesCount" class="hidden absolute -right-1 -top-1 min-w-5 h-5 rounded-full bg-yellow-500 px-1 text-center text-[11px] font-semibold leading-5 text-white"></span>
                             </button>
-                            <button onclick="showParticipants()" class="text-gray-400 hover:text-gray-600 p-2 rounded-lg hover:bg-gray-100" title="View Participants">
+                            <button onclick="showParticipants()" class="text-gray-400 hover:text-blue-700 p-2 rounded-lg hover:bg-blue-50" title="View Participants">
                                 <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4.354a4 4 0 110 5.292M15 21H3v-1a6 6 0 0112 0v1zm0 0h6v-1a6 6 0 00-9-2.239"></path>
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 7h11"></path>
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12h11"></path>
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 17h11"></path>
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 7h.01"></path>
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 12h.01"></path>
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 17h.01"></path>
                                 </svg>
                             </button>
                             <button onclick="leaveChatRoom()" class="text-gray-400 hover:text-red-600 p-2 rounded-lg hover:bg-red-50" title="Leave Chat Room">
