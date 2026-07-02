@@ -81,7 +81,7 @@
 
             <!-- Chat Interface -->
             <div id="chatPanel" class="relative hidden lg:col-span-3 bg-white rounded-lg shadow-sm border border-gray-200 overflow-visible lg:overflow-hidden flex-col min-h-[calc(100vh-9rem)] lg:min-h-0 lg:flex">
-                <div id="chatHeader" class="sticky top-16 lg:top-0 z-40 p-3 sm:p-4 border-b border-gray-200 bg-gray-50 shadow-sm lg:shadow-none hidden">
+                <div id="chatHeader" class="sticky top-0 z-40 p-3 sm:p-4 border-b border-gray-200 bg-gray-50 shadow-sm lg:shadow-none hidden">
                     <div class="flex items-center justify-between gap-3">
                         <button type="button" onclick="showChatRoomsView()" class="lg:hidden inline-flex shrink-0 items-center gap-1 rounded-md border border-gray-200 bg-white px-2.5 py-2 text-sm font-medium text-gray-700 shadow-sm hover:bg-gray-50" title="Back to chat rooms">
                             <svg class="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -205,6 +205,44 @@
         @endif
     </div>
 </div>
+
+<style>
+    @media (max-width: 1023px) {
+        body.chat-mobile-open {
+            overflow: hidden;
+        }
+
+        #chatPanel.chat-mobile-active {
+            position: fixed;
+            inset: 4rem 0 0 0;
+            z-index: 45;
+            display: flex;
+            min-height: 0;
+            overflow: hidden;
+            border-right: 0;
+            border-bottom: 0;
+            border-left: 0;
+            border-radius: 0;
+        }
+
+        #chatPanel.chat-mobile-active #chatHeader,
+        #chatPanel.chat-mobile-active #messageInput,
+        #chatPanel.chat-mobile-active #typingIndicator {
+            flex-shrink: 0;
+        }
+
+        #chatPanel.chat-mobile-active #chatHeader {
+            position: relative;
+            top: auto;
+        }
+
+        #chatPanel.chat-mobile-active #messagesContainer {
+            flex: 1 1 auto;
+            min-height: 0;
+            overscroll-behavior: contain;
+        }
+    }
+</style>
 
 <!-- Create Room Modal -->
 <div id="createRoomModal" class="fixed inset-0 bg-gray-600 bg-opacity-50 overflow-y-auto h-full w-full hidden z-50">
@@ -536,6 +574,8 @@ document.addEventListener('DOMContentLoaded', function() {
     }
 
     window.addEventListener('resize', function() {
+        syncChatResponsiveState();
+
         const pinnedPanel = document.getElementById('pinnedMessagesPanel');
         if (pinnedPanel && !pinnedPanel.classList.contains('hidden')) {
             positionPinnedMessagesPanel();
@@ -595,7 +635,11 @@ function showChatPanelView() {
 
     if (window.innerWidth < 1024) {
         sidebar.classList.add('hidden');
-        panel.scrollIntoView({ behavior: 'smooth', block: 'start' });
+        panel.classList.add('chat-mobile-active');
+        document.body.classList.add('chat-mobile-open');
+    } else {
+        panel.classList.remove('chat-mobile-active');
+        document.body.classList.remove('chat-mobile-open');
     }
 }
 
@@ -607,7 +651,9 @@ function showChatRoomsView() {
     if (window.innerWidth < 1024) {
         panel.classList.add('hidden');
         panel.classList.remove('flex');
+        panel.classList.remove('chat-mobile-active');
         sidebar.classList.remove('hidden');
+        document.body.classList.remove('chat-mobile-open');
         closePinnedMessagesPanel();
     }
 
@@ -617,6 +663,37 @@ function showChatRoomsView() {
     setTimeout(() => {
         sidebar.classList.remove('ring-2', 'ring-blue-200');
     }, 1200);
+}
+
+function syncChatResponsiveState() {
+    const sidebar = document.getElementById('chatSidebar');
+    const panel = document.getElementById('chatPanel');
+    if (!sidebar || !panel) return;
+
+    const hasActiveRoom = Boolean(currentRoomId);
+
+    if (window.innerWidth >= 1024) {
+        sidebar.classList.remove('hidden');
+        panel.classList.remove('chat-mobile-active');
+        document.body.classList.remove('chat-mobile-open');
+
+        if (hasActiveRoom) {
+            panel.classList.remove('hidden');
+            panel.classList.add('flex');
+        }
+
+        return;
+    }
+
+    if (hasActiveRoom && !panel.classList.contains('hidden')) {
+        sidebar.classList.add('hidden');
+        panel.classList.add('chat-mobile-active');
+        document.body.classList.add('chat-mobile-open');
+    } else {
+        sidebar.classList.remove('hidden');
+        panel.classList.remove('chat-mobile-active');
+        document.body.classList.remove('chat-mobile-open');
+    }
 }
 
 function stopChatPolling() {
@@ -883,10 +960,15 @@ function scrollMessagesToBottom(smooth = false) {
     if (!container) return;
 
     button?.classList.add('hidden');
-    container.scrollTo({
-        top: container.scrollHeight,
-        behavior: smooth ? 'smooth' : 'auto'
-    });
+    const scrollToLatest = () => {
+        container.scrollTo({
+            top: container.scrollHeight,
+            behavior: smooth ? 'smooth' : 'auto'
+        });
+    };
+
+    scrollToLatest();
+    requestAnimationFrame(scrollToLatest);
 
     if (smooth) {
         setTimeout(updateScrollToBottomButton, 350);
