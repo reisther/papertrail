@@ -193,7 +193,7 @@ class ProjectController extends Controller
     }
 
     /**
-     * Generate an invite link for students/members to join this project
+     * Generate an invite link for student members to join this project
      */
     public function generateInvitation(Project $project)
     {
@@ -209,7 +209,7 @@ class ProjectController extends Controller
         ]);
 
         return back()
-            ->with('success', 'Invitation link created. Send this link to your members.')
+            ->with('success', 'Invitation link created. Send this link to student members only.')
             ->with('invite_link', route('projects.accept-invitation', $invitation->token));
     }
 
@@ -224,12 +224,21 @@ class ProjectController extends Controller
             abort(403, 'This invitation link is no longer active.');
         }
 
+        $project = $invitation->project;
         $user = Auth::user();
-        if (!$user->isStudent()) {
-            abort(403, 'Only members can accept group invitation links.');
+
+        if ($user->role !== 'Student') {
+            abort(403, 'Only student members can accept group invitation links. Leaders and advisers cannot join through invite links.');
         }
 
-        $project = $invitation->project;
+        $alreadyInAnotherGroup = $user->joinedProjects()
+            ->where('projects.id', '!=', $project->id)
+            ->exists();
+
+        if ($alreadyInAnotherGroup) {
+            abort(403, 'You are already a member of another group.');
+        }
+
         if ($project->owner_id !== $user->id && !$project->members()->where('users.id', $user->id)->exists()) {
             $project->members()->attach($user->id, [
                 'role' => 'member',

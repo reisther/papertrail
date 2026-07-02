@@ -156,7 +156,7 @@ class GroupController extends Controller
         ]);
 
         return back()
-            ->with('success', 'Group invitation link is ready to share.')
+            ->with('success', 'Group invitation link is ready to share with student members only.')
             ->with('invite_link', route('projects.accept-invitation', $invitation->token));
     }
 
