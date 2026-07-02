@@ -166,15 +166,15 @@
                             </button>
                         </div>
                     </div>
-                    <form id="sendMessageForm" class="flex items-end gap-2 sm:gap-3">
-                        <div class="flex-1">
-                            <div class="flex items-end gap-2">
-                                <button type="button" onclick="toggleFileUpload()" class="text-gray-400 hover:text-gray-600 p-2" title="Attach file">
+                    <form id="sendMessageForm" class="flex min-w-0 items-end gap-2 sm:gap-3">
+                        <div class="min-w-0 flex-1">
+                            <div class="flex min-w-0 items-end gap-2">
+                                <button type="button" onclick="toggleFileUpload()" class="shrink-0 text-gray-400 hover:text-gray-600 p-2" title="Attach file">
                                     <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                         <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15.172 7l-6.586 6.586a2 2 0 102.828 2.828l6.414-6.586a4 4 0 00-5.656-5.656l-6.415 6.585a6 6 0 108.486 8.486L20.5 13"></path>
                                     </svg>
                                 </button>
-                                <div class="flex-1">
+                                <div class="min-w-0 flex-1">
                                     <textarea id="messageText" name="message" rows="1" 
                                               class="block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500 resize-none"
                                               placeholder="Type your message..." 
@@ -182,10 +182,10 @@
                                     <input type="file" id="fileInput" name="file" class="hidden" onchange="handleFileSelect(event)">
                                 </div>
                             </div>
-                            <div id="filePreview" class="hidden mt-2 p-2 bg-gray-50 rounded border text-sm">
-                                <div class="flex items-center justify-between">
-                                    <span id="fileName"></span>
-                                    <button type="button" onclick="clearFileSelection()" class="text-red-500 hover:text-red-700">
+                            <div id="filePreview" class="hidden mt-2 max-w-full overflow-hidden rounded border bg-gray-50 p-2 text-sm">
+                                <div class="flex min-w-0 items-center justify-between gap-2">
+                                    <span id="fileName" class="min-w-0 flex-1 truncate text-gray-700"></span>
+                                    <button type="button" onclick="clearFileSelection()" class="shrink-0 text-red-500 hover:text-red-700" title="Remove attachment">
                                         <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path>
                                         </svg>

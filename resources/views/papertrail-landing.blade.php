@@ -171,7 +171,26 @@
                     </div>
                     <div>
                         <label for="login-password" class="block text-sm font-medium text-gray-700">Password</label>
-                        <input type="password" id="login-password" name="password" required class="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500">
+                        <div class="relative mt-1">
+                            <input type="password" id="login-password" name="password" required class="block w-full rounded-md border border-gray-300 px-3 py-2 pr-12 shadow-sm focus:border-blue-500 focus:outline-none focus:ring-blue-500">
+                            <button type="button"
+                                    id="toggle-login-password"
+                                    onclick="togglePasswordVisibility('login-password', 'login-password-eye', 'login-password-eye-off', this)"
+                                    class="absolute inset-y-0 right-0 flex items-center px-3 text-gray-500 hover:text-gray-700 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2"
+                                    aria-label="Show password"
+                                    aria-pressed="false">
+                                <svg id="login-password-eye" class="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z"></path>
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"></path>
+                                </svg>
+                                <svg id="login-password-eye-off" class="hidden h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 3l18 18"></path>
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10.584 10.587A2 2 0 0012 14a2 2 0 001.416-.587"></path>
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9.363 5.365A9.466 9.466 0 0112 5c4.478 0 8.268 2.943 9.542 7a9.97 9.97 0 01-2.099 3.592"></path>
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6.228 6.232C4.518 7.509 3.226 9.53 2.458 12c1.274 4.057 5.064 7 9.542 7 1.446 0 2.822-.306 4.064-.856"></path>
+                                </svg>
+                            </button>
+                        </div>
                     </div>
                     <div class="flex items-center justify-between">
                         <div class="flex items-center">
@@ -343,6 +362,23 @@
         function closeModal(modalId) {
             document.getElementById(modalId).classList.add('hidden');
             document.body.style.overflow = 'auto'; // Restore scrolling
+        }
+
+        function togglePasswordVisibility(inputId, visibleIconId, hiddenIconId, button) {
+            const input = document.getElementById(inputId);
+            const visibleIcon = document.getElementById(visibleIconId);
+            const hiddenIcon = document.getElementById(hiddenIconId);
+            if (!input || !visibleIcon || !hiddenIcon) return;
+
+            const isVisible = input.type === 'text';
+            input.type = isVisible ? 'password' : 'text';
+            visibleIcon.classList.toggle('hidden', !isVisible);
+            hiddenIcon.classList.toggle('hidden', isVisible);
+
+            if (button) {
+                button.setAttribute('aria-pressed', String(!isVisible));
+                button.setAttribute('aria-label', isVisible ? 'Show password' : 'Hide password');
+            }
         }
 
         // Close modal when clicking outside of it
